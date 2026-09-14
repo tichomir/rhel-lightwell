@@ -61,9 +61,12 @@ echo "== 2. disabling the bootc update timer on both =="
 # takes, with nothing on screen to tell you.
 for h in "${APP_HOST}" "${DB_HOST}"; do
     printf '  %-26s ' "${h}"
+    # `systemctl is-enabled` exits 1 for a DISABLED unit - which is the outcome
+    # being asked for here. Without the `|| true` this succeeds and then kills
+    # the script under set -e, right before the snapshot step.
     ssh "${SSH_OPTS[@]}" "${SSH_USER}@${h}" \
-        'sudo systemctl disable --now bootc-fetch-apply-updates.timer >/dev/null 2>&1;
-         systemctl is-enabled bootc-fetch-apply-updates.timer 2>&1'
+        'sudo systemctl disable --now bootc-fetch-apply-updates.timer >/dev/null 2>&1
+         systemctl is-enabled bootc-fetch-apply-updates.timer 2>&1 || true'
 done
 
 echo "== 3. checking the baseline is actually what you want to film =="
