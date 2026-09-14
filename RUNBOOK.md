@@ -36,6 +36,13 @@ Then check these by hand:
 - [ ] `date -Is` at the start and end of each act, on screen
 - [ ] Pin the base by digest if a rebuild mid-series would be fatal:
       `10.1 = sha256:a16e6053…84a8a`, `10.2 = sha256:eb55df15…9bb1e`
+- [ ] **The Lightwell index is running.** The pod has no restart policy, so it
+      does not survive a builder reboot and the remediation act then fails with
+      what looks like a missing package:
+      ```
+      ssh im-builder 'sudo podman pod ps --filter name=lightwell'
+      ```
+      If it is not `Running`, start it: `sudo ./scripts/serve-lightwell-mirror.sh`
 
 ### The three snapshots you have
 
