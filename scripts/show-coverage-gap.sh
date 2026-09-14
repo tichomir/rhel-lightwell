@@ -58,6 +58,30 @@ else:
 PY
 }
 
+# This scene only works from the VULNERABLE baseline. Run it after the
+# remediation act and both interpreters report SAFE - which is correct, and
+# destroys the contrast the scene exists to show. Better to say so loudly than
+# to let it look like the probe is broken.
+APP_JINJA=$("${APP_PY}" -c 'import jinja2; print(jinja2.__version__)' 2>/dev/null)
+if [[ "${APP_JINJA}" == *rhlw* ]]; then
+    printf '\033[1;33m'
+    cat <<WARN
+== WRONG STATE FOR THIS SCENE ==
+
+  The application is already remediated (jinja2 ${APP_JINJA}), so both copies
+  will report SAFE below. That is correct behaviour and useless on camera:
+  this scene is the Act 2 contrast between a patched OS copy and an
+  unpatched application copy.
+
+  Revert to a vulnerable baseline first:
+    VIRSH_URI=qemu+ssh://<user>@<hypervisor>/system SNAP=act1-done ./scripts/reset.sh
+
+  Continuing anyway, for reference.
+
+WARN
+    printf '\033[0m'
+fi
+
 bold "== where this host's two copies of jinja2 come from =="
 printf '  OS  '; rpm -q python3-jinja2 2>/dev/null || echo "python3-jinja2 not installed"
 printf '  app '; "${APP_PY}" -m pip show jinja2 2>/dev/null \
