@@ -49,12 +49,12 @@ key = sys.argv[1]
 try:
     out = Environment().from_string("{{ d|xmlattr }}").render(d={key: "1"})
 except Exception as exc:
-    print(f"  jinja2 {__version__:<20} REJECTED   {type(exc).__name__}: {exc}")
+    print(f"  jinja2 {__version__:<20} SAFE        refuses to render - {type(exc).__name__}: {exc}")
     sys.exit(0)
 if key in out:
-    print(f"  jinja2 {__version__:<20} EMITTED    {out!r}")
+    print(f"  jinja2 {__version__:<20} VULNERABLE  emits it anyway - {out!r}")
 else:
-    print(f"  jinja2 {__version__:<20} sanitised  {out!r}")
+    print(f"  jinja2 {__version__:<20} SAFE        sanitised - {out!r}")
 PY
 }
 
@@ -72,6 +72,37 @@ bold "== the same CVE probe, against both, on this machine =="
 dim "  attribute name: '${PROBE}'  (a space is illegal in an HTML attribute name)"
 probe_script | "${SYS_PY}" /dev/stdin "${PROBE}"
 probe_script | "${APP_PY}" /dev/stdin "${PROBE}"
+echo
+
+dim "  SAFE here means the patched library REFUSES to render rather than"
+dim "  emitting markup a browser will misparse. A space is illegal in an HTML"
+dim "  attribute name: a browser ends the name at the space and treats the rest"
+dim "  as a SEPARATE attribute - which is how an attacker gets to inject one."
+dim "  Failing closed is the fix."
+echo
+
+bold "== \"so why not just use the OS copy?\" =="
+dim "  The obvious question, and the answer is the whole demo:"
+echo
+printf '  1. '; echo "It IS 3.1.6. Using it is the 3.1.x migration - contextfunction"
+printf '     '; echo "removed, Markup moved to markupsafe, autoescape defaults changed."
+printf '     '; echo "Same code change, same regression cycle, same change board."
+echo
+printf '  2. '; echo "The OS markupsafe is $(rpm -q --qf '%{VERSION}' python3-markupsafe 2>/dev/null); this app needs 2.0.1. Jinja2 2.11"
+printf '     '; echo "imports soft_unicode, which markupsafe 2.1 removed."
+echo
+printf '  3. '; echo "It only helps for jinja2. RHEL ships no RPM at all for the rest:"
+for p in fastapi uvicorn starlette psycopg pydantic; do
+    printf '       python3-%-12s ' "${p}"
+    rpm -q "python3-${p}" >/dev/null 2>&1 && echo "present" || echo "no such package"
+done
+printf '     '; echo "Four of five runtime dependencies have no OS packaging to fall back to."
+echo
+printf '  4. '; echo "The venv exists so the dependencies are pinned and reproducible."
+printf '     '; echo "Tracking whatever the OS happens to ship makes the application's"
+printf '     '; echo "behaviour a function of the RHEL minor release."
+echo
+dim "  So the boundary is not something you can opt out of by being clever."
 echo
 
 bold "== what the platform reports about itself =="
