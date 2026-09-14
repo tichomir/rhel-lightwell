@@ -38,7 +38,39 @@ SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 echo "== 1. moving :prod back to the vulnerable baseline (${BASELINE_VER}) =="
 # The guest tracks :prod. If this does not match what the snapshot booted,
 # Act 0 is not a baseline.
-skopeo copy "docker://${NS}/im-train:${BASELINE_VER}" "docker://${NS}/im-train:prod" >/dev/null
+#
+# Stop BEFORE touching the guest if this fails. Reverting the guest while :prod
+# still points at a later image leaves a baseline that looks right on the
+# Status page and is wrong underneath - which is worse than not resetting.
+if ! COPY_ERR=$(skopeo copy "docker://${NS}/im-train:${BASELINE_VER}" \
+                            "docker://${NS}/im-train:prod" 2>&1 >/dev/null); then
+    echo
+    if grep -qi "read-only\|read only" <<<"${COPY_ERR}"; then
+        cat >&2 <<REGISTRY_RO
+The registry is in READ-ONLY maintenance. Pulls work, writes are suspended.
+
+  ${NS} returned:
+    $(grep -o 'denied:.*' <<<"${COPY_ERR}" | head -1)
+
+  Nothing has been changed. The guest has NOT been reverted, on purpose.
+
+  What you can still record: Act 0 and Act 2 need no registry writes. Revert
+  the guest by hand and film them:
+
+    SNAP=act0-baseline ./scripts/reset.sh
+
+  Do not run \`bootc upgrade --check\` on camera while in that state - :prod is
+  still ahead of the guest, so it will report an update waiting.
+
+  What you cannot record: Acts 1, 3 and 4 all push and promote. They need the
+  registry writable. Re-run this script when it is.
+REGISTRY_RO
+    else
+        echo "Could not move :prod. Nothing has been changed." >&2
+        sed 's/^/  /' <<<"${COPY_ERR}" >&2
+    fi
+    exit 1
+fi
 PROD_DIGEST=$(skopeo inspect "docker://${NS}/im-train:prod" | jq -r .Digest)
 PROD_STATE=$(skopeo inspect "docker://${NS}/im-train:prod" | jq -r '.Labels."net.rhlab.imtrain.dependency-state"')
 echo "   :prod -> ${PROD_DIGEST}  (${PROD_STATE})"
