@@ -14,20 +14,39 @@
 ARG BASE_TAG=10.1
 FROM quay.io/CHANGEME/baseos:${BASE_TAG}
 
-# Lightwell index configuration. pip.conf selects Track A (packages.redhat.com)
-# or Track B (the lab mirror); netrc carries the credentials for whichever.
-COPY images/app/pip.conf /etc/pip.conf
-COPY images/app/netrc /root/.netrc
-
 RUN python3 -m venv /opt/app/venv \
     && /opt/app/venv/bin/pip install --no-cache-dir --upgrade pip
 
 COPY requirements.txt /opt/app/requirements.txt
 
-# Credentials are removed in the SAME layer that uses them. A later `rm` would
-# leave them recoverable in the image history.
-RUN /opt/app/venv/bin/pip install --no-cache-dir -r /opt/app/requirements.txt \
-    && rm -f /root/.netrc /etc/pip.conf
+# Lightwell index configuration, MOUNTED and never copied.
+#
+# pip.conf selects Track A (packages.redhat.com) or Track B (the lab mirror);
+# netrc carries the credentials for whichever. Both are supplied by
+# build-and-push.sh as build secrets:
+#
+#   podman build --secret id=netrc,src=images/app/netrc ...
+#
+# THIS USED TO BE A `COPY` FOLLOWED BY `rm` IN A LATER LAYER, AND THAT LEAKS.
+# A COPY writes the file into its own layer; a later rm only hides it from the
+# final filesystem. The bytes stay in the layer and come straight back out:
+#
+#   skopeo copy containers-storage:<image> dir:/tmp/x
+#   grep -rl 'password' /tmp/x          # finds the blob
+#
+# On a bootc image it is worse than it first looks. /root is a symlink to
+# /var/roothome, so the credential lands at var/roothome/.netrc - not the path
+# you would think to check, and not the path the rm appears to target.
+#
+# These images are pushed to PUBLIC repositories. With the lab mirror that
+# leaks demo/demo; with Track A it would publish a real Red Hat Registry
+# Service Account token to the internet.
+#
+# A --mount=type=secret is never committed to any layer, which is the only
+# version of this that is actually safe.
+RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
+    --mount=type=secret,id=netrc,target=/root/.netrc \
+    /opt/app/venv/bin/pip install --no-cache-dir -r /opt/app/requirements.txt
 
 COPY app/ /opt/app/app/
 COPY sql/ /opt/app/sql/

@@ -49,10 +49,15 @@ sed "s|quay.io/CHANGEME|${NS}|" images/app/Containerfile > "${TMP}/app.Container
 sed "s|quay.io/CHANGEME|${NS}|" images/db/Containerfile  > "${TMP}/db.Containerfile"
 
 echo "== im-train:${VER} =="
+# pip.conf and netrc go in as build SECRETS, not COPY. A copied file lives in
+# its own layer forever and a later rm only hides it - and these images are
+# pushed to public repositories. See the comment in images/app/Containerfile.
 podman build \
     --build-arg "BASE_TAG=${BASE_TAG}" \
     --build-arg "APP_VERSION=${VER}" \
     --build-arg "DEP_STATE=${DEP_STATE}" \
+    --secret "id=pipconf,src=images/app/pip.conf" \
+    --secret "id=netrc,src=images/app/netrc" \
     -t "${NS}/im-train:${VER}" \
     -f "${TMP}/app.Containerfile" .
 
