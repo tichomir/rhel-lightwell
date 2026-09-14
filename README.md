@@ -391,3 +391,13 @@ Described in the closing act, not built. See `lightwell-demo.rhdp.net` for the
 automated end state this complements.
 
 **OpenShift.** Not in the picture. That is the point.
+
+---
+
+## Recording
+
+[RUNBOOK.md](RUNBOOK.md) — every command per act, with measured timings, the
+lines worth saying, and the traps that cost takes. It also lists the
+corrections this build found in the proposal and build guide, including four
+places where the deck and the terminal would have contradicted each other on
+camera.
