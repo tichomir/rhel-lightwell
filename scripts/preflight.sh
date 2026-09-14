@@ -203,7 +203,7 @@ ip -br link show type bridge 2>/dev/null | grep -q . \
     && pass "at least one bridge exists" \
     || warn "no bridge found - virt-install --network bridge=br0 will fail. Either create br0 or use the default NAT network"
 echo "  resolving the demo hostnames:"
-for h in im-train.rh-lab.labs im-train-db.rh-lab.labs lightwell.rh-lab.labs; do
+for h in im-train.homelab.com im-train-db.homelab.com lightwell.homelab.com; do
     printf '    %-26s ' "$h"
     getent hosts "$h" 2>/dev/null | awk '{print $1}' | head -1 || echo "does not resolve (needs DNS or /etc/hosts)"
 done

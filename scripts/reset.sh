@@ -9,8 +9,8 @@ set -euo pipefail
 
 VM="${VM:-im-train}"
 SNAP="${SNAP:-act0-baseline}"
-APP_HOST="${APP_HOST:-im-train.rh-lab.labs}"
-DB_HOST="${DB_HOST:-im-train-db.rh-lab.labs}"
+APP_HOST="${APP_HOST:-im-train.homelab.com}"
+DB_HOST="${DB_HOST:-im-train-db.homelab.com}"
 SSH_USER="${SSH_USER:-rhel-admin}"
 
 echo "== reverting ${VM} to ${SNAP} =="

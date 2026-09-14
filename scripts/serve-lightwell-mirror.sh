@@ -34,10 +34,10 @@ echo
 echo "Serving ${PKGDIR} on port ${PORT}"
 echo
 echo "Add to ~/.netrc on the builder:"
-echo "  machine lightwell.rh-lab.labs login ${USER_NAME} password ${USER_PASS}"
+echo "  machine lightwell.homelab.com login ${USER_NAME} password ${USER_PASS}"
 echo
 echo "Then:"
-echo "  pip config set global.index-url https://lightwell.rh-lab.labs/simple/"
+echo "  pip config set global.index-url https://lightwell.homelab.com/simple/"
 echo "  pip config set global.extra-index-url https://pypi.org/simple/"
 echo
 echo "Verify:"

@@ -195,7 +195,7 @@ naming, not a verified fact.
 ### The integrity rule
 
 The lab index is indistinguishable from the real one on screen. So: never show a
-`packages.redhat.com` URL while resolving from `lightwell.rh-lab.labs`. Record
+`packages.redhat.com` URL while resolving from `lightwell.homelab.com`. Record
 the Lightwell scene against the real index, or caption it unambiguously.
 
 ---
