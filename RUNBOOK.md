@@ -57,10 +57,33 @@ Then check these by hand:
 Reverting any of them takes **under a second** and the guest resumes *already
 running*, because these are internal snapshots carrying RAM state.
 
+**To reset to the start of the whole demo, use `reset-demo.sh`, not `reset.sh`:**
+
 ```bash
-# reset to the start of the whole demo
-ssh im-builder 'cd ~/rhel-lightwell && VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system SNAP=act0-baseline ./scripts/reset.sh'
+ssh im-builder 'cd ~/rhel-lightwell && sudo VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system ./scripts/reset-demo.sh'
 ```
+
+`reset.sh` reverts the **guest only**. A demo run leaves two other pieces of
+state behind, and both silently break the next take:
+
+| Left behind | What it does to the next take |
+|---|---|
+| **`:prod` has moved** — every act ends by moving it | Act 0 opens with an update already pending, and Act 1's `bootc upgrade` jumps straight to the remediated image — four acts collapsed into one |
+| **The builder's `pip.conf` points at the Lightwell index** | A "vulnerable" rebuild installs the **remediated** wheel, because PEP 440 lets a plain `==2.11.3` match `2.11.3+rhlw00001` and the lab index serves nothing else. The image gets labelled `vulnerable` and you find out on camera |
+
+`reset-demo.sh` does all three — moves `:prod` back to the vulnerable baseline,
+returns the builder to the vulnerable configuration, reverts the guest — then
+asserts the result really is a baseline and **refuses to declare readiness if
+it is not**. The check that matters most is `bootc upgrade --check` reporting
+*No changes*: nothing else catches a stale `:prod`.
+
+`build-and-push.sh` now also refuses outright if the pin says vulnerable while
+`pip.conf` points at a Lightwell index, so that mislabelled image cannot be
+built by accident.
+
+**If the registry is in read-only maintenance** (quay.io does this), the script
+changes nothing and tells you so. Acts 0 and 2 need no registry writes and can
+still be filmed; Acts 1, 3 and 4 all push and promote, so they cannot.
 
 ```bash
 # reset to the start of Act 2, skipping Act 1's 4-minute pull
