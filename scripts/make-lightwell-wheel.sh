@@ -90,9 +90,20 @@ sed -i "s/__version__ = \"${BASE_TAG}\"/__version__ = \"${BASE_TAG}${SUFFIX}\"/"
 grep -n "__version__" "${VERSION_FILE}"
 
 echo "== building wheel =="
-python3 -m pip install --quiet --upgrade build wheel setuptools
-# --no-isolation avoids fetching build deps, which matters on a disconnected builder.
-python3 -m build --wheel --no-isolation
+# Build tooling goes in a throwaway venv, never into the system interpreter.
+#
+# On RHEL the system setuptools is an RPM with no dist-info RECORD file, so
+# `pip install --upgrade setuptools` fails with "Cannot uninstall setuptools:
+# the package's contents are unknown" and takes the whole build with it. A venv
+# sidesteps it entirely and makes the build independent of whatever the host
+# happens to have installed.
+BUILD_VENV="${BUILD_VENV:-${WORK}/.build-venv}"
+python3 -m venv "${BUILD_VENV}"
+"${BUILD_VENV}/bin/pip" install --quiet --upgrade pip build wheel setuptools
+
+# --no-isolation builds against the venv's own setuptools rather than fetching
+# build deps again, which also matters on a disconnected builder.
+"${BUILD_VENV}/bin/python" -m build --wheel --no-isolation
 
 mkdir -p "${OUT}"
 cp dist/*.whl "${OUT}/"
