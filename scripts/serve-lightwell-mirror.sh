@@ -4,6 +4,10 @@
 #   sudo ./scripts/serve-lightwell-mirror.sh
 #   TLS=no sudo ./scripts/serve-lightwell-mirror.sh    # plain HTTP on :8080
 #
+# Runs under systemd via Quadlet, so it survives a reboot of the builder. That
+# matters more than it sounds: a stopped index makes the remediation act fail
+# inside the image build with what looks like a missing package.
+#
 # TLS is the default on purpose. The index URL is on screen during the
 # remediation act, and `https://lightwell.homelab.com/simple/` reads as a real
 # index where `http://lightwell.homelab.com:8080/simple/` reads as a lab.
@@ -97,21 +101,83 @@ http {
 }
 NGINX
 
-echo "== starting pod ${POD} (nginx :443 -> pypiserver :8080) =="
-podman pod create --name "${POD}" -p 443:443 >/dev/null
+# Managed by systemd via Quadlet, NOT by a bare `podman run`.
+#
+# A `podman run -d` container has restart=no and no unit, so it does not come
+# back after a reboot. The builder then looks fine and the remediation act
+# fails inside the image build with a pip resolution error - which reads as
+# "the package is missing" rather than "the index is not running". That is a
+# genuinely expensive five minutes to debug mid-session.
+#
+# Quadlet is the supported way to do this on RHEL 9 with podman 5
+# (`podman generate systemd` is deprecated). systemd owns the lifecycle, the
+# units are enabled at boot, and a crashed container is restarted.
+QUADLET_DIR="${QUADLET_DIR:-/etc/containers/systemd}"
+mkdir -p "${QUADLET_DIR}"
 
-podman run -d --pod "${POD}" --name "${POD}-pypi" \
-    -v "${PKGDIR}:/data/packages:Z" \
-    -v "${HTPASSWD}:/data/.htpasswd:ro,Z" \
-    docker.io/pypiserver/pypiserver:latest \
-    run -P /data/.htpasswd -a update /data/packages >/dev/null
+cat > "${QUADLET_DIR}/${POD}.pod" <<EOF
+[Unit]
+Description=Lightwell lab index (pod)
 
-podman run -d --pod "${POD}" --name "${POD}-tls" \
-    -v "${CERTDIR}:/tls:ro,Z" \
-    -v "${CERTDIR}/nginx.conf:/etc/nginx/nginx.conf:ro,Z" \
-    docker.io/library/nginx:alpine >/dev/null
+[Pod]
+PublishPort=443:443
 
-sleep 3
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > "${QUADLET_DIR}/${POD}-pypi.container" <<EOF
+[Unit]
+Description=pypiserver serving the Lightwell lab index
+
+[Container]
+Image=docker.io/pypiserver/pypiserver:latest
+Pod=${POD}.pod
+Volume=${PKGDIR}:/data/packages:Z
+Volume=${HTPASSWD}:/data/.htpasswd:ro,Z
+Exec=run -P /data/.htpasswd -a update /data/packages
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > "${QUADLET_DIR}/${POD}-tls.container" <<EOF
+[Unit]
+Description=TLS front end for the Lightwell lab index
+
+[Container]
+Image=docker.io/library/nginx:alpine
+Pod=${POD}.pod
+Volume=${CERTDIR}:/tls:ro,Z
+Volume=${CERTDIR}/nginx.conf:/etc/nginx/nginx.conf:ro,Z
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "== wrote Quadlet units to ${QUADLET_DIR} =="
+ls -1 "${QUADLET_DIR}"/${POD}* | sed 's/^/  /'
+
+systemctl daemon-reload
+
+# Quadlet turns lightwell.pod into lightwell-pod.service. Starting that pulls
+# in both containers; enabling it is what makes this survive a reboot.
+echo "== starting ${POD}-pod.service =="
+systemctl enable --now "${POD}-pod.service" 2>/dev/null || systemctl start "${POD}-pod.service"
+
+for _ in $(seq 1 20); do
+    curl -sk -o /dev/null -m 3 "https://${HOSTNAME_FQDN}/simple/" && break
+    sleep 2
+done
+
+systemctl --no-pager --plain is-enabled "${POD}-pod.service" 2>/dev/null \
+    | sed 's/^/  pod service enabled: /'
 podman pod ps --filter name="${POD}"
 
 cat <<NEXT
