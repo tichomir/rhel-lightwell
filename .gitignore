@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.env
+pip.conf
+netrc
+config.toml
+*.qcow2
+/out/
+.DS_Store
+.claude/
+
+# Held back deliberately: docs/ contains the build guide and demo proposal,
+# which quote internal Red Hat material (unreleased scanner/feed timelines,
+# unpublished catalogue figures, a named customer's security posture, the
+# LW00007 SKU). This repository is PUBLIC. Make the repo private, or redact
+# those documents, before removing this line.
+docs/

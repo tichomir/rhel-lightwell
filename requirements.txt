@@ -1,0 +1,22 @@
+# Runtime dependencies, fully pinned.
+#
+# jinja2 is THE SUBJECT OF THIS DEMO. It is deliberately pinned to a version
+# carrying CVEs whose only upstream fix is the 3.1.x line.
+#
+#   Act 2 (vulnerable):   jinja2==2.11.3
+#   Act 4 (remediated):   jinja2==2.11.3+rhlw.00001
+#
+# Flip that one line and rebuild the image. Nothing else changes.
+#
+# markupsafe MUST stay at 2.0.1: 2.1+ removed soft_unicode, which Jinja2 2.11
+# imports at module load. Without this pin you get ImportError on first request.
+#
+# Do NOT use fastapi.templating.Jinja2Templates anywhere in this app. Starlette's
+# templating module imports jinja2.pass_context, which does not exist before
+# Jinja2 3.0. Static files are served with StaticFiles instead.
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+psycopg[binary]==3.2.1
+jinja2==2.11.3
+markupsafe==2.0.1

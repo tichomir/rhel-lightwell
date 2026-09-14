@@ -1,0 +1,8 @@
+# Copy to images/app/netrc before building. Never commit the real file.
+#
+# Track B - the lab mirror:
+machine lightwell.rh-lab.labs login demo password demo
+
+# Track A - the real index. Username is the Registry Service Account in the
+# form XXXXXXX|service-account-name, created at access.redhat.com.
+# machine packages.redhat.com login XXXXXXX|service-account-name password <token>

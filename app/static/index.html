@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Mode Train Service</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Image Mode Train Service</h1>
+  <span class="tier" id="tier-badge">&nbsp;</span>
+</header>
+
+<div class="shell">
+  <nav class="sidebar" aria-label="Sections">
+    <button class="nav-item is-current" data-panel="book">Book ticket</button>
+    <button class="nav-item" data-panel="timetable">Timetable</button>
+    <button class="nav-item" data-panel="tickets">My tickets</button>
+    <button class="nav-item" data-panel="receipt">Receipt</button>
+    <button class="nav-item" data-panel="status">Status</button>
+  </nav>
+
+  <main class="content">
+
+    <!-- Book ------------------------------------------------------------ -->
+    <section class="panel is-current" id="panel-book">
+      <h2>Book a ticket</h2>
+      <div class="form">
+        <label for="origin">From</label>
+        <select id="origin"><option value="">Select station</option></select>
+
+        <label for="destination">To</label>
+        <select id="destination"><option value="">Select station</option></select>
+
+        <label for="travel-date">Date</label>
+        <input type="date" id="travel-date">
+
+        <label for="passenger">Passenger</label>
+        <input type="text" id="passenger" placeholder="Name on the ticket">
+
+        <div class="actions">
+          <button class="btn-primary" id="search-btn">Find services</button>
+        </div>
+      </div>
+      <div id="search-results" class="results" aria-live="polite"></div>
+    </section>
+
+    <!-- Timetable ------------------------------------------------------- -->
+    <section class="panel" id="panel-timetable">
+      <h2>Timetable</h2>
+      <p class="lede">All services between the two selected stations.</p>
+      <div class="form form-inline">
+        <label for="tt-origin">From</label>
+        <select id="tt-origin"><option value="">Select station</option></select>
+        <label for="tt-destination">To</label>
+        <select id="tt-destination"><option value="">Select station</option></select>
+        <button class="btn-secondary" id="tt-btn">Show</button>
+      </div>
+      <div id="timetable-results" class="results" aria-live="polite"></div>
+    </section>
+
+    <!-- Tickets --------------------------------------------------------- -->
+    <section class="panel" id="panel-tickets">
+      <h2>My tickets</h2>
+      <p class="lede">Bookings persist in <code>/var</code> on the database host,
+        so they survive an operating system upgrade.</p>
+      <div id="tickets-results" class="results" aria-live="polite"></div>
+    </section>
+
+    <!-- Receipt --------------------------------------------------------- -->
+    <section class="panel" id="panel-receipt">
+      <h2>Receipt template</h2>
+      <p class="lede">Operators supply their own receipt layout. The service
+        renders it with Jinja2 — the dependency this demo patches.</p>
+      <div class="form">
+        <label for="receipt-booking">Booking</label>
+        <select id="receipt-booking"><option value="">Select booking</option></select>
+        <label for="receipt-template">Template</label>
+        <textarea id="receipt-template" rows="8" spellcheck="false"></textarea>
+        <div class="actions">
+          <button class="btn-primary" id="receipt-btn">Render receipt</button>
+        </div>
+      </div>
+      <pre id="receipt-output" class="output" aria-live="polite"></pre>
+    </section>
+
+    <!-- Status ---------------------------------------------------------- -->
+    <section class="panel" id="panel-status">
+      <div class="status-head">
+        <h2>System status</h2>
+        <button class="btn-secondary" id="refresh-btn">Refresh</button>
+      </div>
+
+      <!-- The two figures below are the entire demo. They are rendered large
+           because this page is watched on video. -->
+      <div class="headline">
+        <div class="figure">
+          <span class="figure-label">Operating system</span>
+          <span class="figure-value" id="fig-os">&mdash;</span>
+          <span class="figure-note" id="fig-os-note">&nbsp;</span>
+        </div>
+        <div class="figure">
+          <span class="figure-label">Jinja2 in this image</span>
+          <span class="figure-value" id="fig-dep">&mdash;</span>
+          <span class="figure-note" id="fig-dep-note">&nbsp;</span>
+        </div>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <h3>Deployment</h3>
+          <dl id="deployment-list"></dl>
+        </article>
+        <article class="card">
+          <h3>Dependencies</h3>
+          <dl id="deps-list"></dl>
+        </article>
+        <article class="card">
+          <h3>Database</h3>
+          <dl id="db-list"></dl>
+        </article>
+        <article class="card">
+          <h3>Template filter check</h3>
+          <dl id="probe-list"></dl>
+          <p class="card-note">An attribute name containing a space is rendered
+            through the <code>xmlattr</code> filter. Vulnerable Jinja2 emits it
+            verbatim; a fixed release rejects it.</p>
+        </article>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# The application layer.
+#
+# Build context is the repository root:
+#   podman build -t quay.io/<ns>/im-train:1.0 -f images/app/Containerfile .
+#
+# THE CRUCIAL DETAIL: pip install runs HERE, at image build time, inside the
+# bootc image. That is what makes remediating a library an OS image rebuild, so
+# the application fix travels through the same registry, the same tag promotion
+# and the same `bootc upgrade` as an OS fix.
+#
+# Installing dependencies at runtime would be easier and would destroy the
+# entire argument of this demo. Don't.
+
+FROM quay.io/CHANGEME/baseos:10.1
+
+# Lightwell index configuration. pip.conf selects Track A (packages.redhat.com)
+# or Track B (the lab mirror); netrc carries the credentials for whichever.
+COPY images/app/pip.conf /etc/pip.conf
+COPY images/app/netrc /root/.netrc
+
+RUN python3 -m venv /opt/app/venv \
+    && /opt/app/venv/bin/pip install --no-cache-dir --upgrade pip
+
+COPY requirements.txt /opt/app/requirements.txt
+
+# Credentials are removed in the SAME layer that uses them. A later `rm` would
+# leave them recoverable in the image history.
+RUN /opt/app/venv/bin/pip install --no-cache-dir -r /opt/app/requirements.txt \
+    && rm -f /root/.netrc /etc/pip.conf
+
+COPY app/ /opt/app/app/
+COPY sql/ /opt/app/sql/
+
+# SELinux: the venv interpreter and console scripts need an executable type, or
+# the unit fails on first boot with a permission error that looks like anything
+# except a labelling problem. Test this in rehearsal, not on camera.
+RUN semanage fcontext -a -t bin_t "/opt/app/venv/bin(/.*)?" || true \
+    && restorecon -R /opt/app || true
+
+COPY images/app/im-train.service /usr/lib/systemd/system/im-train.service
+RUN systemctl enable im-train
+
+# Record which dependency set this image was built with, so `podman inspect` and
+# `skopeo inspect` can answer "is this the remediated build?" without booting it.
+ARG APP_VERSION=dev
+ARG DEP_STATE=unknown
+LABEL org.opencontainers.image.title="Image Mode Train Service" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      net.rhlab.imtrain.tier="app" \
+      net.rhlab.imtrain.dependency-state="${DEP_STATE}"

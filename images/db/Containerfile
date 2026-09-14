@@ -1,0 +1,24 @@
+# The database tier.
+#
+# Built once and never rebuilt. In Act 4 its only job is to show `bootc status`
+# unchanged while the application tier moved: different tier, independent
+# lifecycle, zero blast radius.
+#
+# PGDATA stays under /var, which persists across `bootc upgrade`. That is what
+# makes the "Postgres data preserved" claim in the deck true - and Act 4
+# demonstrates it rather than asserting it.
+
+FROM quay.io/CHANGEME/baseos:10.1
+
+RUN dnf -y install postgresql-server postgresql-contrib \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+COPY sql/ /opt/seed/
+COPY images/db/pg-initdb.sh /usr/local/bin/pg-initdb.sh
+COPY images/db/pg-initdb.service /usr/lib/systemd/system/pg-initdb.service
+RUN chmod 0755 /usr/local/bin/pg-initdb.sh
+
+RUN systemctl enable pg-initdb.service postgresql.service
+
+LABEL net.rhlab.imtrain.tier="db"

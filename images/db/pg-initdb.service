@@ -1,0 +1,17 @@
+[Unit]
+Description=Initialise the Image Mode Train Service database
+After=network-online.target
+Wants=network-online.target
+Before=postgresql.service
+# Guard: only run while the cluster does not exist. Keeps this from firing again
+# after a bootc upgrade, which would wipe bookings and break the Act 4
+# persistence demonstration.
+ConditionPathExists=!/var/lib/pgsql/data/PG_VERSION
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/pg-initdb.sh
+
+[Install]
+WantedBy=multi-user.target

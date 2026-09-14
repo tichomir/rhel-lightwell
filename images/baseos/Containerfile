@@ -1,0 +1,37 @@
+# The Standard Operating Environment.
+#
+# One container representing the pre-tested OS runtime blueprint, with
+# hardening and site configuration. Both application images layer on this, so a
+# base OS change in Act 1 is one rebuild here plus one rebuild on top.
+#
+# Once you begin recording, pin this by digest rather than by tag. rhel-bootc is
+# rebuilt at least monthly, and a base that shifts between takes will cost you
+# an afternoon working out why the OS version moved on its own:
+#
+#   FROM registry.redhat.io/rhel10/rhel-bootc@sha256:<digest>
+#
+# Act 1 changes exactly one thing in this file: 10.1 becomes 10.2.
+
+FROM registry.redhat.io/rhel10/rhel-bootc:10.1
+
+RUN dnf -y install \
+        openssh-server \
+        cloud-init \
+        python3 \
+        python3-pip \
+        policycoreutils-python-utils \
+        jq \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+COPY sshd_hardening.conf /etc/ssh/sshd_config.d/99-lab.conf
+
+RUN systemctl enable sshd cloud-init
+
+# No /etc/ostree/auth.json here on purpose. This demo pushes to PUBLIC quay.io
+# repositories, so the hosts need no pull credentials.
+#
+# If you switch to private repositories, credentials go in /etc/ostree/auth.json
+# and NOT in podman's auth.json location. bootc does not read podman's. `podman
+# pull` will work perfectly while `bootc upgrade` fails on authentication, which
+# is a genuinely confusing twenty minutes.

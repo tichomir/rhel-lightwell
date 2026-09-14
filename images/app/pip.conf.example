@@ -1,0 +1,18 @@
+# Copy to images/app/pip.conf before building. Not committed: it selects which
+# Lightwell track a build resolves against, and that is a per-environment
+# decision.
+#
+# ---- Track B: the lab mirror (default while LW00007 is pending) ----
+[global]
+index-url = https://lightwell.rh-lab.labs/simple/
+extra-index-url = https://pypi.org/simple/
+trusted-host = lightwell.rh-lab.labs
+
+# ---- Track A: the real Lightwell Network Remediated index ----
+# Swap the block above for this one once entitlement is confirmed. Verify
+# coverage first:
+#   pip index versions jinja2
+#
+# [global]
+# index-url = https://packages.redhat.com/lightwell/python/remediated/
+# extra-index-url = https://pypi.org/simple/
