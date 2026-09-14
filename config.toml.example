@@ -1,9 +1,26 @@
 # bootc-image-builder customisation. Copy to config.toml and edit.
+#
+# The password here is for CONSOLE access only - if a guest loses its network,
+# the virt-manager or Cockpit console is the only way in, and a key does not
+# help you there. SSH itself uses the key. "changeme" is deliberate for a
+# NAT-only lab; change it before any of these hosts gets a routable address.
+
 [[customizations.user]]
-name = "sysadmin"
+name = "rhel-admin"
 password = "changeme"
 key = "ssh-ed25519 AAAA... you@example.com"
 groups = ["wheel"]
 
 [customizations.kernel]
 append = "console=ttyS0"
+
+# Size the root filesystem explicitly. The default is around 10 GiB, which is
+# not enough: bootc keeps the current AND rollback deployment of /usr, so the
+# image size is paid for roughly twice, and /var then holds the database and
+# the container storage for staged upgrades.
+#
+# The app tier also carries disk-only snapshots at every act boundary, so it
+# gets more headroom than the database tier.
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = "40 GiB"

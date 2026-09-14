@@ -11,7 +11,7 @@ VM="${VM:-im-train}"
 SNAP="${SNAP:-act0-baseline}"
 APP_HOST="${APP_HOST:-im-train.rh-lab.labs}"
 DB_HOST="${DB_HOST:-im-train-db.rh-lab.labs}"
-SSH_USER="${SSH_USER:-sysadmin}"
+SSH_USER="${SSH_USER:-rhel-admin}"
 
 echo "== reverting ${VM} to ${SNAP} =="
 virsh snapshot-revert "${VM}" "${SNAP}" --running
