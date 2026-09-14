@@ -95,9 +95,11 @@ app)
     jq -r '.matches[]
            | select(.artifact.type=="python")
            | select(.artifact.locations[0].path | test("/opt/app"))
-           | "  \(.vulnerability.severity|.[0:6])  \(.artifact.name) \(.artifact.version)
-       \(.vulnerability.id)  \(.relatedVulnerabilities//[]|map(.id)|join(","))
-       fix: \(.vulnerability.fix.versions|join(", "))"' "${CACHE}" | sort -u
+           | [(.vulnerability.severity), (.artifact.name+" "+.artifact.version),
+              ((.relatedVulnerabilities//[]|map(.id)|join(","))|if .=="" then .vulnerability.id else . end),
+              ("fix "+(.vulnerability.fix.versions|join(",")|if .=="" then "none" else . end))]
+           | @tsv' "${CACHE}" \
+      | sort -u | awk -F'\t' '{printf "  %-8s %-22s %-18s %s\n", $1, $2, $3, $4}'
     echo
     echo "  Read the 'fix' column twice. starlette's fix is a minor bump."
     echo "  jinja2's is the 3.1.x line - a migration, not an upgrade."
@@ -113,8 +115,9 @@ triage)
     bold "actionable RPM findings - genuine 'rebuild on a newer batch' items"
     jq -r '.matches[]
            | select(.vulnerability.fix.state=="fixed" and .artifact.type=="rpm")
-           | "  \(.vulnerability.severity|.[0:6])  \(.artifact.name) \(.artifact.version)
-       \(.vulnerability.id) -> \(.vulnerability.fix.versions|join(","))"' "${CACHE}" | sort -u
+           | [(.vulnerability.severity), .artifact.name, .vulnerability.id,
+              ("-> "+(.vulnerability.fix.versions|join(",")))] | @tsv' "${CACHE}" \
+      | sort -u | awk -F'\t' '{printf "  %-8s %-22s %-18s %s\n", $1, $2, $3, $4}'
 
     bold "actionable Go findings - mostly NOT real"
     jq -r '[.matches[]|select(.vulnerability.fix.state=="fixed" and .artifact.type=="go-module")]|length
@@ -131,9 +134,13 @@ jinja2|subject)
     bold "the demo subject"
     jq -r '.matches[]
            | select(.artifact.name|ascii_downcase=="jinja2")
-           | "  \(.vulnerability.id)  \(.relatedVulnerabilities//[]|map(.id)|join(","))
-       severity: \(.vulnerability.severity)   cvss: \(([.vulnerability.cvss[]?.metrics.baseScore]|max) // "n/a")
-       installed: \(.artifact.version)   fixed in: \(.vulnerability.fix.versions|join(", "))"' "${CACHE}" | sort -u
+           | [((.relatedVulnerabilities//[]|map(.id)|join(","))|if .=="" then "-" else . end),
+              .vulnerability.severity,
+              (([.vulnerability.cvss[]?.metrics.baseScore]|max) // "n/a" | tostring),
+              .artifact.version,
+              (.vulnerability.fix.versions|join(","))] | @tsv' "${CACHE}" \
+      | sort -u | awk -F'\t' 'BEGIN{printf "  %-16s %-8s %-5s %-10s %s\n","CVE","SEVERITY","CVSS","INSTALLED","FIXED IN"}
+                               {printf "  %-16s %-8s %-5s %-10s %s\n", $1,$2,$3,$4,$5}'
     echo
     echo "  Every fix is in the 3.1.x line. There is no 2.11.x that resolves these,"
     echo "  which is the entire reason this demo exists."
