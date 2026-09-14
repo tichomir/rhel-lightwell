@@ -6,6 +6,7 @@
 set -euo pipefail
 
 PGDATA=/var/lib/pgsql/data
+SEED_MARKER=/var/lib/pgsql/.seed-complete
 DB_NAME=imtrain
 DB_USER=imtrain
 DB_PASS=imtrain
@@ -20,12 +21,24 @@ if [[ ! -f "${PGDATA}/PG_VERSION" ]]; then
     echo "listen_addresses = '*'"               >> "${PGDATA}/postgresql.conf"
 fi
 
-systemctl start postgresql
-# Wait for the socket rather than sleeping a fixed interval.
-for _ in $(seq 1 30); do
-    if /usr/bin/pg_isready -q; then break; fi
-    sleep 1
-done
+# Bring the cluster up with pg_ctl, NOT systemctl.
+#
+# This unit is ordered Before=postgresql.service. Asking systemd to start
+# postgresql from inside it deadlocks: systemd queues that job behind this very
+# unit, so the script waits for postgresql while postgresql waits for the
+# script. `systemctl list-jobs` shows pg-initdb running and postgresql waiting,
+# forever, and the guest boots with no database and no error.
+#
+# pg_ctl talks to the cluster directly and never involves systemd. -w waits for
+# readiness, so no polling loop is needed either.
+PGCTL=$(command -v pg_ctl || echo /usr/bin/pg_ctl)
+su - postgres -c "${PGCTL} -D ${PGDATA} -w -l ${PGDATA}/initdb-seed.log start"
+
+# Hand a clean, stopped cluster back to systemd however this script exits, so
+# postgresql.service starts it properly rather than finding it already running
+# under a pg_ctl-owned postmaster.
+cleanup() { su - postgres -c "${PGCTL} -D ${PGDATA} -w stop" || true; }
+trap cleanup EXIT
 
 if ! su - postgres -c "psql -tAc \"select 1 from pg_roles where rolname='${DB_USER}'\"" | grep -q 1; then
     su - postgres -c "psql -c \"create role ${DB_USER} login password '${DB_PASS}'\""
@@ -39,5 +52,11 @@ su - postgres -c "psql -d ${DB_NAME} -f /opt/seed/schema.sql"
 su - postgres -c "psql -d ${DB_NAME} -f /opt/seed/seed.sql"
 su - postgres -c "psql -d ${DB_NAME} -c 'grant all on all tables in schema public to ${DB_USER}'"
 su - postgres -c "psql -d ${DB_NAME} -c 'grant all on all sequences in schema public to ${DB_USER}'"
+
+# Written only now, after seeding has actually succeeded. The unit is guarded on
+# THIS file rather than on PGDATA/PG_VERSION, because initdb creates PG_VERSION
+# before any seeding happens - so guarding on it means a run that dies partway
+# can never retry, and the guest boots forever with an empty database.
+touch "${SEED_MARKER}"
 
 echo "Database ready"

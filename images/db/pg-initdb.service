@@ -3,10 +3,15 @@ Description=Initialise the Image Mode Train Service database
 After=network-online.target
 Wants=network-online.target
 Before=postgresql.service
-# Guard: only run while the cluster does not exist. Keeps this from firing again
+# Guard: only run until seeding has SUCCEEDED. Keeps this from firing again
 # after a bootc upgrade, which would wipe bookings and break the Act 4
 # persistence demonstration.
-ConditionPathExists=!/var/lib/pgsql/data/PG_VERSION
+#
+# Deliberately not guarded on PGDATA/PG_VERSION: initdb writes that before any
+# seeding happens, so a run that fails partway could never retry and the guest
+# would boot forever with an empty database. The marker is written last, by the
+# script, only once the seed has loaded.
+ConditionPathExists=!/var/lib/pgsql/.seed-complete
 
 [Service]
 Type=oneshot
