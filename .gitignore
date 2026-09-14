@@ -10,6 +10,7 @@ build/
 pip.conf
 netrc
 config.toml
+config-*.toml
 *.qcow2
 /out/
 .DS_Store
