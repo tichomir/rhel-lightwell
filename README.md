@@ -238,6 +238,59 @@ defaults to `+rhlw00001` for that reason.
 and set `SUFFIX` to match. Until then this is a guess about someone else's
 naming, not a verified fact.
 
+### Switching to the real index, when LW00007 lands
+
+```bash
+./scripts/check-track-a.sh      # read-only, safe to run while waiting
+./scripts/switch-track.sh a     # writes pip.conf and a netrc template
+```
+
+**Only two files differ between the tracks** — `images/app/pip.conf` and
+`images/app/netrc`, both gitignored. Nothing else changes: not the
+Containerfile, not `build-and-push.sh`, not the tests, not the images, not the
+VMs. That was the design intent of having two tracks, and it means the
+remediation scene can be re-shot later without rebuilding anything else.
+
+What has to be confirmed before relying on Track A, in order of how likely it
+is to bite:
+
+1. **Does the Remediated tier exist at the documented URL?** Probed 2026-09-14,
+   unauthenticated: `lightwell/python/validated/` and `lightwell/java/validated/`
+   return **401** — they exist and want credentials.
+   `lightwell/python/remediated/` returns **404**. Validated answering from the
+   same host rules out DNS, egress and TLS, so this is about the URL or about
+   availability. Ask before assuming.
+2. **Does the catalogue cover `jinja2` at `2.11.3`?** Coverage is per package
+   *and* per version and is not published. This is the likeliest blocker.
+3. **What exactly is the version string?** It may not be `+rhlw00001`. It
+   appears on the Status page, in `pip show` and in the deck, so if it differs
+   the lab mirror must be rebuilt to match:
+   `SUFFIX=<theirs> ./scripts/make-lightwell-wheel.sh`. `app/sysinfo.py` only
+   greps for `rhlw`, so the Status page and the test suite keep working either way.
+4. **Rotate the Registry Service Account token** if you ever built with an
+   earlier version of this repo — see the note at the end of `RUNBOOK.md`.
+
+**Do not substitute the Validated tier.** It is upstream-parity — signed, SBOM,
+SLSA L3, but the *same version*. This demo turns entirely on obtaining a fix
+*without* a version change, which only Remediated does.
+
+### What Track B can and cannot do
+
+Worth being precise, because one line of the Act 3 script depends on it.
+
+Real on Track B: the CVEs, the vulnerable pin, and **the fix itself** — 
+`patches/0001` derives from the actual upstream commits, and the wheel genuinely
+closes the vulnerability. The probe flips and the unmodified test suite passes.
+
+Simulated on Track B: **only the provenance.** The wheel was built locally, so
+there is no Red Hat signature, no SBOM and no SLSA L3 attestation.
+
+That means the proposal's Act 3 instruction to *"show the signature and
+provenance"* **cannot be performed on Track B**. Describe it verbally and
+caption the scene, or hold that beat for Track A. It is also the clearest
+statement of what Track A actually buys: not the fix, which is already real, but
+Red Hat's attestation of it.
+
 ### The integrity rule
 
 The lab index is indistinguishable from the real one on screen. So: never show a
