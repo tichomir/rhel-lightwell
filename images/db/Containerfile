@@ -8,7 +8,8 @@
 # makes the "Postgres data preserved" claim in the deck true - and Act 4
 # demonstrates it rather than asserting it.
 
-FROM quay.io/CHANGEME/baseos:10.1
+ARG BASE_TAG=10.1
+FROM quay.io/CHANGEME/baseos:${BASE_TAG}
 
 RUN dnf -y install postgresql-server postgresql-contrib \
     && dnf clean all \

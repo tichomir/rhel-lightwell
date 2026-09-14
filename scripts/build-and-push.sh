@@ -37,8 +37,9 @@ else
 fi
 echo "== dependency state: ${DEP_STATE} (${DEP_LINE}) =="
 
-echo "== baseos:${BASE_TAG} =="
-podman build -t "${NS}/baseos:${BASE_TAG}" images/baseos
+echo "== baseos:${BASE_TAG} (FROM rhel-bootc:${BASE_TAG}) =="
+podman build --build-arg "BASE_TAG=${BASE_TAG}" \
+    -t "${NS}/baseos:${BASE_TAG}" images/baseos
 
 # The app and db Containerfiles reference quay.io/CHANGEME/baseos. Substitute at
 # build time so the committed files carry no personal namespace.
@@ -49,6 +50,7 @@ sed "s|quay.io/CHANGEME|${NS}|" images/db/Containerfile  > "${TMP}/db.Containerf
 
 echo "== im-train:${VER} =="
 podman build \
+    --build-arg "BASE_TAG=${BASE_TAG}" \
     --build-arg "APP_VERSION=${VER}" \
     --build-arg "DEP_STATE=${DEP_STATE}" \
     -t "${NS}/im-train:${VER}" \
@@ -56,7 +58,8 @@ podman build \
 
 if [[ "${BUILD_DB}" == "yes" ]]; then
     echo "== im-train-db:pg16 =="
-    podman build -t "${NS}/im-train-db:pg16" -f "${TMP}/db.Containerfile" .
+    podman build --build-arg "BASE_TAG=${BASE_TAG}" \
+        -t "${NS}/im-train-db:pg16" -f "${TMP}/db.Containerfile" .
 fi
 
 if [[ "${PUSH}" != "yes" ]]; then

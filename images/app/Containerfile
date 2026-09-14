@@ -11,7 +11,8 @@
 # Installing dependencies at runtime would be easier and would destroy the
 # entire argument of this demo. Don't.
 
-FROM quay.io/CHANGEME/baseos:10.1
+ARG BASE_TAG=10.1
+FROM quay.io/CHANGEME/baseos:${BASE_TAG}
 
 # Lightwell index configuration. pip.conf selects Track A (packages.redhat.com)
 # or Track B (the lab mirror); netrc carries the credentials for whichever.
