@@ -4,7 +4,7 @@
 # carrying CVEs whose only upstream fix is the 3.1.x line.
 #
 #   Act 2 (vulnerable):   jinja2==2.11.3
-#   Act 4 (remediated):   jinja2==2.11.3+rhlw.00001
+#   Act 4 (remediated):   jinja2==2.11.3+rhlw00001
 #
 # Flip that one line and rebuild the image. Nothing else changes.
 #

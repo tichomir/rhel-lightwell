@@ -20,7 +20,7 @@ TRACKED_PACKAGES = ["jinja2", "markupsafe", "fastapi", "uvicorn"]
 
 # A remediated Lightwell artifact carries a PEP 440 local version segment.
 # Java uses ".rhlw-0000X"; Python cannot (not valid PEP 440) and uses a local
-# version instead, e.g. "2.11.3+rhlw.00001".
+# version instead, e.g. "2.11.3+rhlw00001".
 LIGHTWELL_MARKER = "rhlw"
 
 

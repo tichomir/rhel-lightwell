@@ -10,44 +10,67 @@
 # nothing else, which IS the Lightwell model.
 #
 # Version form: Java uses ".rhlw-0000X". Python cannot - it is not valid PEP 440
-# - so a local version is used instead: "2.11.3+rhlw.00001". Confirm the exact
+# - so a local version is used instead: "2.11.3+rhlw00001". Confirm the exact
 # string the real index uses before recording, and match it here so the two
 # tracks are visually interchangeable.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
 REPO="${REPO:-https://github.com/pallets/jinja.git}"
 BASE_TAG="${BASE_TAG:-2.11.3}"
 FIX_COMMIT="${FIX_COMMIT:-}"
-SUFFIX="${SUFFIX:-+rhlw.00001}"
+PATCH="${PATCH:-${ROOT}/patches/0001-xmlattr-reject-invalid-attribute-names.patch}"
 WORK="${WORK:-/tmp/lightwell-backport}"
 OUT="${OUT:-/srv/lightwell-mirror/packages}"
 
-if [[ -z "${FIX_COMMIT}" ]]; then
-    cat >&2 <<'USAGE'
-FIX_COMMIT is required.
-
-Find it in the GHSA advisory for the CVE you chose, then:
-
-    FIX_COMMIT=<sha> ./scripts/make-lightwell-wheel.sh
-
-Deliberately not defaulted: which commit you pick determines what the demo
-claims to have fixed, and that should be a decision rather than a default.
-USAGE
-    exit 2
-fi
+# PEP 440 normalises numeric local-version segments, so "+rhlw.00001" is
+# installed and displayed as "+rhlw.1" - the leading zeros are stripped and you
+# cannot keep them. Only a segment that is not purely numeric survives intact,
+# which is why the default has no separating dot:
+#
+#   +rhlw.00001  -> 2.11.3+rhlw.1        (zeros lost)
+#   +rhlw00001   -> 2.11.3+rhlw00001     (kept)
+#
+# This is visible on the Status page and in `pip show`, so it must match what
+# the real Remediated index publishes. CONFIRM THAT STRING AGAINST TRACK A
+# BEFORE RECORDING and set SUFFIX to match.
+SUFFIX="${SUFFIX:-+rhlw00001}"
 
 rm -rf "${WORK}"
 git clone --quiet "${REPO}" "${WORK}"
 cd "${WORK}"
 git checkout --quiet -b lightwell-backport "${BASE_TAG}"
 
-echo "== cherry-picking ${FIX_COMMIT} onto ${BASE_TAG} =="
-if ! git cherry-pick "${FIX_COMMIT}"; then
-    echo >&2
-    echo "Cherry-pick did not apply cleanly." >&2
-    echo "Resolve minimally, or change candidate. Scope the change to the fix." >&2
-    echo "Working tree left at ${WORK} for inspection." >&2
-    exit 1
+# Two routes to the same four-line change.
+#
+# FIX_COMMIT cherry-picks straight from upstream. For jinja2 this CONFLICTS:
+# 3.1.x carries type annotations, f-strings and pass_eval_context where 2.11.3
+# has evalcontextfilter and iteritems(). The conflicts are era-related, not
+# semantic, but they are real - so the default route applies the pre-resolved
+# patch in patches/, whose header records the upstream commits it derives from.
+if [[ -n "${FIX_COMMIT}" ]]; then
+    echo "== cherry-picking ${FIX_COMMIT} onto ${BASE_TAG} =="
+    if ! git cherry-pick "${FIX_COMMIT}"; then
+        echo >&2
+        echo "Cherry-pick conflicted (expected for jinja2 - see patches/)." >&2
+        echo "Falling back to the pre-resolved patch." >&2
+        git cherry-pick --abort
+        FIX_COMMIT=""
+    fi
+fi
+
+if [[ -z "${FIX_COMMIT}" ]]; then
+    [[ -f "${PATCH}" ]] || { echo "Patch not found: ${PATCH}" >&2; exit 1; }
+    echo "== applying $(basename "${PATCH}") onto ${BASE_TAG} =="
+    git apply --verbose "${PATCH}" || {
+        echo "Patch did not apply. Is BASE_TAG=${BASE_TAG} right?" >&2
+        echo "Working tree left at ${WORK} for inspection." >&2
+        exit 1
+    }
+    # Left uncommitted on purpose: `git diff ${BASE_TAG}` below then shows the
+    # backport straight from the working tree, and the script does not need a
+    # configured git identity on the builder.
 fi
 
 echo "== diff against ${BASE_TAG} =="

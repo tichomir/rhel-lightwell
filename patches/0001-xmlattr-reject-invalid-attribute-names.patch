@@ -1,0 +1,76 @@
+Backport: reject invalid characters in xmlattr attribute names
+==============================================================
+
+Target:   jinja2 2.11.3 (tag 2.11.3, pallets/jinja)
+Fixes:    CVE-2024-22195  (space in attribute name;  upstream fix in 3.1.3)
+          CVE-2024-34064  (also / > = characters;    upstream fix in 3.1.4)
+
+Upstream commits this is derived from:
+  7dd3680e  xmlattr filter disallows keys with spaces
+  d6550307  disallow invalid characters in keys to xmlattr filter
+
+Why a patch file and not a cherry-pick
+--------------------------------------
+Neither commit cherry-picks cleanly onto 2.11.3. The conflicts are entirely
+era-related, not semantic: 3.1.x carries type annotations, f-strings,
+pass_eval_context and d.items(), where 2.11.3 has evalcontextfilter and
+iteritems(). The security logic is four lines and is identical.
+
+This patch is the cumulative 3.1.4 behaviour expressed in 2.11.3's idiom, so
+all four illegal characters are rejected. That matters: tests/test_cve.py
+parametrises over all four, and a space-only backport (3.1.3) fails three of
+them in the remediated state.
+
+Verified on Python 3.12.14, x86_64 (ubi9/python-312): the repository's full
+test suite passes unmodified in both states -- --expect=vulnerable against
+upstream 2.11.3, and --expect=remediated against a wheel built from this patch.
+
+Note re.ASCII makes the patched module Python 3 only. 2.11.3 still claims
+Python 2.7 support; irrelevant here, since the target is RHEL 10's Python 3.12.
+
+diff --git a/src/jinja2/filters.py b/src/jinja2/filters.py
+index 74b108dc..c397b75b 100644
+--- a/src/jinja2/filters.py
++++ b/src/jinja2/filters.py
+@@ -205,6 +205,11 @@ def do_lower(s):
+     return soft_unicode(s).lower()
+ 
+ 
++# Check for characters that would move the parser state from key to value.
++# https://html.spec.whatwg.org/#attribute-name-state
++_attr_key_re = re.compile(r"[\s/>=]", flags=re.ASCII)
++
++
+ @evalcontextfilter
+ def do_xmlattr(_eval_ctx, d, autospace=True):
+     """Create an SGML/XML attribute string based on the items in a dict.
+@@ -228,12 +233,24 @@ def do_xmlattr(_eval_ctx, d, autospace=True):
+ 
+     As you can see it automatically prepends a space in front of the item
+     if the filter returned something unless the second parameter is false.
++
++    User input must not be used as **keys** to this filter. A key containing a
++    space, ``/`` solidus, ``>`` greater-than sign or ``=`` equals sign can
++    terminate the attribute name early and inject further attributes, so such
++    a key fails with a ``ValueError``. **Values** are escaped automatically.
+     """
+-    rv = u" ".join(
+-        u'%s="%s"' % (escape(key), escape(value))
+-        for key, value in iteritems(d)
+-        if value is not None and not isinstance(value, Undefined)
+-    )
++    items = []
++
++    for key, value in iteritems(d):
++        if value is None or isinstance(value, Undefined):
++            continue
++
++        if _attr_key_re.search(key) is not None:
++            raise ValueError("Invalid character in attribute name: %r" % (key,))
++
++        items.append(u'%s="%s"' % (escape(key), escape(value)))
++
++    rv = u" ".join(items)
+     if autospace and rv:
+         rv = u" " + rv
+     if _eval_ctx.autoescape:

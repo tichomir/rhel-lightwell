@@ -12,10 +12,37 @@ production, with no upgrade and no code change.
 
 ## Status
 
-**Unverified.** Everything here was written offline and has not been executed.
-`python3 -m py_compile` and `bash -n` pass on every file, which catches syntax
-errors and nothing else. The first thing to do is [step 1](#step-1-lock-the-dependency),
-which can invalidate the dependency choice the whole repository is built around.
+**Step 1 is done. The dependency choice holds.** Everything else is unverified —
+written offline, syntax-checked only, never run on a host.
+
+Verified on Python 3.12.14 / x86_64 (`ubi9/python-312`, which is the same
+interpreter version RHEL 10 ships):
+
+| Check | Result |
+|---|---|
+| `jinja2==2.11.3` installs on 3.12 | Yes |
+| Imports and renders (`asyncio.coroutine` fear) | Yes — `asyncsupport` is not reached |
+| `xmlattr` emits the unsafe attribute name | Yes — suitable for the vulnerable act |
+| Upstream fix cherry-picks cleanly | **No** — see below, and `patches/` |
+| Backported wheel builds | Yes — `jinja2-2.11.3+rhlw00001-py2.py3-none-any.whl` |
+| Full suite, unmodified, `--expect=vulnerable` | 13 passed, 7 skipped |
+| Full suite, unmodified, `--expect=remediated` | 13 passed, 7 skipped |
+
+The 7 skips are the database-backed functional tests; no Postgres was running.
+**Those still need to pass before the repository can be called verified**, and
+they are the API-compatibility evidence the whole demo rests on.
+
+The cherry-pick does not apply. Neither upstream fix commit lands on 2.11.3:
+3.1.x carries type annotations, f-strings and `pass_eval_context` where 2.11.3
+has `evalcontextfilter` and `iteritems()`. The conflicts are era-related rather
+than semantic — the security logic is four lines and identical — so the resolved
+backport is committed as a patch in `patches/`, with its provenance in the
+header, and `make-lightwell-wheel.sh` applies it by default.
+
+One consequence worth knowing before recording: the backport must be the
+**cumulative 3.1.4** behaviour, not just 3.1.3. `tests/test_cve.py` parametrises
+over all four illegal characters, and a space-only backport fails three of them
+in the remediated state.
 
 ---
 
@@ -143,14 +170,27 @@ Java uses `.rhlw-0000X` appended to the upstream version — a sequential
 cumulative-patch counter, documented example `5.3.17.rhlw-00001`.
 
 **Python cannot use that form**; it is not valid PEP 440. Python uses a local
-version segment instead:
+version segment instead — and the obvious transliteration does not survive:
 
 ```
-2.11.3+rhlw.00001
+2.11.3+rhlw.00001   ->  installs and displays as  2.11.3+rhlw.1
+2.11.3+rhlw00001    ->  installs and displays as  2.11.3+rhlw00001
 ```
 
-Confirm the exact string the real index uses before recording, and match it in
-the lab index so the two tracks are visually interchangeable on camera.
+PEP 440 normalises local-version segments and strips leading zeros from any
+segment that is purely numeric. With the separating dot, `00001` is numeric and
+the zeros are gone; without it, `rhlw00001` is alphanumeric and survives intact.
+There is no way to keep `+rhlw.00001` on screen.
+
+This is not cosmetic. The version appears on the Status page, in `pip show` and
+in the wheel filename, and the deck says `.rhlw-00001`. Pick one string and make
+the slide, the lab index and the real index agree, or the terminal and the slide
+will contradict each other on camera. `SUFFIX` in `make-lightwell-wheel.sh`
+defaults to `+rhlw00001` for that reason.
+
+**Confirm the exact string the real Remediated index publishes before recording**
+and set `SUFFIX` to match. Until then this is a guess about someone else's
+naming, not a verified fact.
 
 ### The integrity rule
 
@@ -273,6 +313,9 @@ images/
   baseos/          Standard Operating Environment
   app/             Application layer + systemd unit
   db/              Database tier + first-boot initdb
+patches/
+  0001-xmlattr-*.patch     The verified backport. Header records the upstream
+                           commits and why a cherry-pick will not do
 scripts/
   pincheck.sh              Step 1. Run before anything else
   make-lightwell-wheel.sh  Track B backport
