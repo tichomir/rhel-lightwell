@@ -35,6 +35,36 @@ if [[ "${DEP_LINE}" == *rhlw* ]]; then
 else
     DEP_STATE="vulnerable"
 fi
+# CROSS-CHECK THE LABEL AGAINST WHERE pip WILL ACTUALLY RESOLVE.
+#
+# DEP_STATE above is derived from requirements.txt alone. That is not enough:
+# PEP 440 lets a plain "==2.11.3" specifier match "2.11.3+rhlw00001", and the
+# Lightwell index has nothing else. So pip.conf pointing at a Lightwell index
+# while the pin carries no rhlw silently installs the REMEDIATED wheel and
+# labels the image `vulnerable`.
+#
+# That mislabelled image is indistinguishable from the real thing until it is
+# on screen, so refuse to build it.
+if [[ "${DEP_STATE}" == "vulnerable" ]] \
+   && grep -qE '^[[:space:]]*index-url.*(lightwell|packages\.redhat\.com)' images/app/pip.conf; then
+    cat >&2 <<'MISMATCH'
+REFUSING TO BUILD: the pin and the index disagree.
+
+  requirements.txt pins a version with no `rhlw` suffix, so this build is
+  labelled `vulnerable` - but images/app/pip.conf points at a Lightwell index.
+
+  A plain `==2.11.3` specifier MATCHES `2.11.3+rhlw00001` under PEP 440, and
+  the Lightwell index serves nothing else. pip would install the remediated
+  wheel into an image labelled vulnerable, and you would not find out until
+  the CVE observable failed to fire on camera.
+
+  For a vulnerable build:   ./scripts/switch-track.sh vulnerable
+  For a remediated build:   pin jinja2==2.11.3+rhlw00001 in requirements.txt
+
+MISMATCH
+    exit 1
+fi
+
 echo "== dependency state: ${DEP_STATE} (${DEP_LINE}) =="
 
 echo "== baseos:${BASE_TAG} (FROM rhel-bootc:${BASE_TAG}) =="
