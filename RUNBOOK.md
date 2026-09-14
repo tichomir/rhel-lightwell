@@ -583,6 +583,32 @@ ask, and you want to be able to say the take is uncut.
 
 ---
 
+## What to say is out of scope
+
+Deck slide 14 carries this. State it before someone asks, so the boundaries
+come from you rather than from a sceptic in the third row.
+
+**Described, not built**
+
+| | |
+|---|---|
+| The automation layer | Event-Driven Ansible, AAP, Trusted Profile Analyzer, the Lightwell Deep Agent, ServiceNow change records. Act 5 describes it; the RHDP demo builds it. |
+| CI/CD | Every build was run by hand from a shell. No pipeline, no Tekton, no GitLab. |
+| Satellite | Its own slide — see the Satellite section of the deck. |
+
+**Simplified to one of everything**
+
+| | |
+|---|---|
+| One host, not a fleet | No remote execution across many hosts, no inventory or reporting at scale. |
+| A minor OS bump, 10.1 to 10.2 | Not a RHEL 9 to 10 major upgrade, which is a different exercise. |
+| A direct dependency | The vulnerable library is named in `requirements.txt`. The harder and more realistic case is a transitive one — which is where SBOMs and TPA start to matter. |
+
+The transitive-dependency point is the one a good architect will raise on your
+behalf. Better to have said it first.
+
+---
+
 ## Corrections to the existing documents
 
 Things the proposal and build guide get wrong, found by running them:

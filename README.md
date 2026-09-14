@@ -454,6 +454,24 @@ automated end state this complements.
 
 **OpenShift.** Not in the picture. That is the point.
 
+**CI/CD.** Every build here is run by hand from a shell. No pipeline, no
+Tekton, no GitLab. `gitlab.com/redhat/cop/rhel/rhel-image-mode-cicd` has
+templates for the version that is automated.
+
+### Simplified to one of everything
+
+Not omissions so much as a deliberately small blast radius. Each one is the
+obvious next thing to build if the demo needs to go further:
+
+- **One host, not a fleet.** No remote execution across many hosts, no
+  inventory or reporting at scale.
+- **A minor OS bump, 10.1 to 10.2.** Not a RHEL 9 to 10 major upgrade, which
+  is a different exercise with different failure modes.
+- **A direct dependency.** The vulnerable library is named in
+  `requirements.txt`. The harder and more realistic case is a transitive one -
+  which is also where SBOMs and Trusted Profile Analyzer start to earn their
+  place.
+
 ---
 
 ## Recording
