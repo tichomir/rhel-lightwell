@@ -252,30 +252,41 @@ better with an infrastructure audience.
 ### Then answer the question it provokes
 
 Someone will say: *there is a patched 3.1.6 right there, why not just use it?*
-The script prints the answer, and three of the four points are checked live:
 
 1. **It IS 3.1.6.** Using it *is* the 3.1.x migration — `contextfunction`
    removed, `Markup` moved to markupsafe, autoescape defaults changed. Same
-   code change, same regression cycle, same change board.
-2. **The OS markupsafe is 2.1.3; this app needs 2.0.1.** Jinja2 2.11 imports
-   `soft_unicode`, which markupsafe 2.1 removed. The OS versions are actively
-   incompatible with the pinned application.
-3. **It only helps for jinja2.** RHEL 10 ships **no RPM at all** for `fastapi`,
-   `uvicorn`, `starlette`, `psycopg` or `pydantic` — four of five runtime
-   dependencies. Verified on the host.
-4. **The venv exists so dependencies are pinned and reproducible.** Tracking
-   whatever the OS happens to ship makes the application's behaviour a function
-   of the RHEL minor release.
+   code change, same regression cycle, same change board. This is the whole
+   reason the demo exists, and it is the strongest of the three.
+2. **It covers a minority of the dependency set.** Of the five direct pins in
+   `requirements.txt`, RHEL 10 ships RPMs for **two**:
 
-Point 3 is the one to land:
+   | Pin | RHEL 10 |
+   |---|---|
+   | `jinja2` | `python3-jinja2` 3.1.6 — exists |
+   | `markupsafe` | `python3-markupsafe` 2.1.3 — exists |
+   | `fastapi` | no RPM |
+   | `uvicorn` | no RPM |
+   | `psycopg` | no RPM for psycopg 3 — see below |
 
-> "Even if I gave up my pinning and used Red Hat's copy, it only covers one of
-> my five dependencies. There is no RPM for the other four. This boundary is
-> not something I can opt out of by being clever."
+   Two of five covered, three not. The transitive tree — starlette, pydantic,
+   anyio, h11 — has none either.
+3. **Mixing the two sources is worse than either.** Half the dependency tree
+   pinned in `requirements.txt` and half tracking the RHEL minor release is the
+   worst of both. The venv exists to prevent exactly that.
 
-**Trap:** this scene only works from a vulnerable baseline. Run it after the
-remediation act and both copies correctly report SAFE, which destroys the
-contrast. The script now detects that and warns before continuing.
+**Be precise about psycopg.** RHEL 10 *does* ship `python3-psycopg2` (2.9.9).
+That is a different package with a different API, not the psycopg 3 this app
+uses. Say "no psycopg 3", not "no Postgres driver" — someone will check.
+
+**Do NOT say "the OS markupsafe is 2.1.3 but this app needs 2.0.1."** It is
+true and it is circular: the 2.0.1 pin exists *only because* jinja2 is pinned
+at 2.11. Take the OS jinja2 3.1.6 and OS markupsafe 2.1.3 works fine with it.
+It is not an argument against using the OS copy, and anyone who knows the
+ecosystem will spot that.
+
+**Also do not check RPM availability on the image-mode guest.** It has no dnf
+repositories at all, so `rpm -q` only tells you what is installed, never what
+exists. Check inside a repo-enabled RHEL 10 container.
 
 ### The scanner
 

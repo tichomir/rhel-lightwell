@@ -106,27 +106,48 @@ dim "  Failing closed is the fix."
 echo
 
 bold "== \"so why not just use the OS copy?\" =="
-dim "  The obvious question, and the answer is the whole demo:"
+dim "  The obvious question. Two honest answers, and one that sounds good but"
+dim "  is circular - see the note at the end."
 echo
 printf '  1. '; echo "It IS 3.1.6. Using it is the 3.1.x migration - contextfunction"
 printf '     '; echo "removed, Markup moved to markupsafe, autoescape defaults changed."
 printf '     '; echo "Same code change, same regression cycle, same change board."
+printf '     '; echo "This is the whole reason the demo exists."
 echo
-printf '  2. '; echo "The OS markupsafe is $(rpm -q --qf '%{VERSION}' python3-markupsafe 2>/dev/null); this app needs 2.0.1. Jinja2 2.11"
-printf '     '; echo "imports soft_unicode, which markupsafe 2.1 removed."
+printf '  2. '; echo "It covers a minority of the dependency set. The five direct pins"
+printf '     '; echo "in requirements.txt, against what RHEL 10 actually ships:"
 echo
-printf '  3. '; echo "It only helps for jinja2. RHEL ships no RPM at all for the rest:"
-for p in fastapi uvicorn starlette psycopg pydantic; do
-    printf '       python3-%-12s ' "${p}"
-    rpm -q "python3-${p}" >/dev/null 2>&1 && echo "present" || echo "no such package"
+# NOTE: rpm -q on THIS host only says "installed", not "an RPM exists" - an
+# image-mode guest has no dnf repos at all. Availability below was checked
+# against RHEL 10 BaseOS + AppStream inside a repo-enabled container.
+have=0; miss=0
+for entry in "jinja2:yes:3.1.6" "markupsafe:yes:2.1.3" "fastapi:no:-" "uvicorn:no:-" "psycopg:no:see note"; do
+    p="${entry%%:*}"; rest="${entry#*:}"; avail="${rest%%:*}"; ver="${rest#*:}"
+    if [[ "${avail}" == "yes" ]]; then
+        printf '       %-14s RPM exists      %s\n' "${p}" "${ver}"
+        have=$((have+1))
+    else
+        printf '       %-14s no RPM          %s\n' "${p}" "${ver}"
+        miss=$((miss+1))
+    fi
 done
-printf '     '; echo "Four of five runtime dependencies have no OS packaging to fall back to."
 echo
-printf '  4. '; echo "The venv exists so the dependencies are pinned and reproducible."
-printf '     '; echo "Tracking whatever the OS happens to ship makes the application's"
-printf '     '; echo "behaviour a function of the RHEL minor release."
+printf '     '; echo "So ${have} of 5 covered, ${miss} of 5 not. And the transitive tree - starlette,"
+printf '     '; echo "pydantic, anyio, h11 - has no RPMs either."
 echo
-dim "  So the boundary is not something you can opt out of by being clever."
+printf '     '; echo "Note on psycopg: RHEL ships python3-psycopg2 (2.9.9). That is a"
+printf '     '; echo "DIFFERENT package with a different API, not the psycopg 3 this app"
+printf '     '; echo "uses. Do not claim there is no Postgres driver; say there is no"
+printf '     '; echo "psycopg 3, which is the one in requirements.txt."
+echo
+printf '  3. '; echo "Mixing the two sources is worse than either. Half the dependency"
+printf '     '; echo "tree pinned in requirements.txt and half tracking the RHEL minor"
+printf '     '; echo "release is the worst of both. The venv exists to prevent exactly that."
+echo
+dim "  WHAT NOT TO SAY: \"the OS markupsafe is 2.1.3 but this app needs 2.0.1\"."
+dim "  True, but circular - the 2.0.1 pin exists ONLY because jinja2 is pinned at"
+dim "  2.11. Take the OS jinja2 3.1.6 and OS markupsafe 2.1.3 works fine with it."
+dim "  It is not an argument against using the OS copy."
 echo
 
 bold "== what the platform reports about itself =="
