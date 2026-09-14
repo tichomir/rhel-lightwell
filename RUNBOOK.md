@@ -36,13 +36,15 @@ Then check these by hand:
 - [ ] `date -Is` at the start and end of each act, on screen
 - [ ] Pin the base by digest if a rebuild mid-series would be fatal:
       `10.1 = sha256:a16e6053…84a8a`, `10.2 = sha256:eb55df15…9bb1e`
-- [ ] **The Lightwell index is running.** The pod has no restart policy, so it
-      does not survive a builder reboot and the remediation act then fails with
-      what looks like a missing package:
+- [ ] **The Lightwell index is up.** It runs under systemd via Quadlet and is
+      enabled at boot, so this should just be true - verified by rebooting the
+      builder and watching it answer 5 seconds later with no intervention.
+      Confirm anyway, because a stopped index makes the remediation act fail
+      inside the image build with what looks like a missing package:
       ```
-      ssh im-builder 'sudo podman pod ps --filter name=lightwell'
+      ssh im-builder 'systemctl is-active lightwell-pod.service && curl -sk https://lightwell.homelab.com/simple/jinja2/ | grep -o "jinja2-[^\"<#]*" | head -1'
       ```
-      If it is not `Running`, start it: `sudo ./scripts/serve-lightwell-mirror.sh`
+      If it is down: `sudo ./scripts/serve-lightwell-mirror.sh`
 
 ### The three snapshots you have
 
@@ -559,7 +561,8 @@ Things the proposal and build guide get wrong, found by running them:
 | `bootc upgrade` says no update | `:prod` not moved, or digest unchanged | `skopeo inspect docker://quay.io/rhte2023/im-train:prod`, compare with `bootc status --json` |
 | Rollback silently undone | Update timer re-enabled | `reset.sh` handles it; otherwise `systemctl disable --now bootc-fetch-apply-updates.timer` |
 | Status page shows db unavailable | `im-train-db` down, or DNS | `ssh im-train-db 'sudo -u postgres pg_isready'` — the app degrades to 503 on booking endpoints and keeps everything else working, so this costs one panel, not the take |
-| Registry auth gone after a reboot | `podman login` writes to `/run`, which is tmpfs | Re-login with `REGISTRY_AUTH_FILE=/root/.docker/config.json` |
+| Registry auth gone after a reboot | `podman login` writes to `/run`, which is tmpfs | Re-login with `REGISTRY_AUTH_FILE=/root/.docker/config.json`. Already done on this builder and verified across a reboot |
+| Lightwell index not answering | systemd units not started | `systemctl status lightwell-pod lightwell-pypi lightwell-tls`. Units live in `/etc/containers/systemd/`; after editing them, `systemctl daemon-reload` regenerates |
 | `virsh` fails over `qemu+ssh` | Remote user not in `libvirt` group | `sudo usermod -aG libvirt <user>` — SSH and sudo working is not enough, polkit needs the group |
 | Guest has no network after reprovision | libvirt network is routed with no DHCP range | Reservations exist for these two MACs; a *new* guest needs `virsh net-update default add ip-dhcp-host` |
 | App fails on first boot after a rebuild | SELinux labels on `/opt/app` | `semanage fcontext` + `restorecon` are in the Containerfile, but verify in rehearsal, not on camera |
