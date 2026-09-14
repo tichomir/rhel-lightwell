@@ -26,6 +26,15 @@ RUN dnf -y install \
 
 COPY sshd_hardening.conf /etc/ssh/sshd_config.d/99-lab.conf
 
+# LAB ONLY. The recording workflow drives both hosts over SSH unattended:
+# reset.sh disables the update timer and reseeds the database between takes,
+# and neither can answer a password prompt. Baked into the image rather than
+# configured per host so it survives every rebuild and reprovision.
+#
+# Do not carry this into anything that is not a throwaway demo.
+RUN printf '%%wheel ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/99-lab-nopasswd && \
+    chmod 0440 /etc/sudoers.d/99-lab-nopasswd
+
 RUN systemctl enable sshd cloud-init
 
 # No /etc/ostree/auth.json here on purpose. This demo pushes to PUBLIC quay.io
