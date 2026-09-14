@@ -12,37 +12,74 @@ production, with no upgrade and no code change.
 
 ## Status
 
-**Step 1 is done. The dependency choice holds.** Everything else is unverified —
-written offline, syntax-checked only, never run on a host.
-
-Verified on Python 3.12.14 / x86_64 (`ubi9/python-312`, which is the same
-interpreter version RHEL 10 ships):
+**Built and running. Acts 0–2 are ready to film.** Both image-mode guests are
+provisioned, the app serves the Status page against a live database, the CVE
+observable is reachable, and the retake loop is verified.
 
 | Check | Result |
 |---|---|
-| `jinja2==2.11.3` installs on 3.12 | Yes |
-| Imports and renders (`asyncio.coroutine` fear) | Yes — `asyncsupport` is not reached |
-| `xmlattr` emits the unsafe attribute name | Yes — suitable for the vulnerable act |
-| Upstream fix cherry-picks cleanly | **No** — see below, and `patches/` |
+| `jinja2==2.11.3` installs and works on RHEL 10's Python 3.12.14 | Yes — `asyncsupport` is never reached |
+| `xmlattr` emits the unsafe attribute name | Yes — the vulnerable act has something to show |
+| Upstream fix cherry-picks cleanly | **No** — resolved patch in `patches/`, see below |
 | Backported wheel builds | Yes — `jinja2-2.11.3+rhlw00001-py2.py3-none-any.whl` |
-| Full suite, unmodified, `--expect=vulnerable` | 13 passed, 7 skipped |
-| Full suite, unmodified, `--expect=remediated` | 13 passed, 7 skipped |
+| Full suite, unmodified, against **live PostgreSQL** | **20 passed, 0 skipped** |
+| `rhel-bootc` 10.1 **and** 10.2 both published | Yes — the OS delta is real |
+| Three images built, pushed, publicly pullable | Yes — verified anonymously |
+| Both guests boot image-mode, `bootc status` clean | Yes — RHEL 10.1 |
+| App → database across tiers | Yes — PostgreSQL 16.14 |
+| Snapshot revert actually discards changes | Yes — tested with a marker file |
+| `reset.sh` end to end | **~6 seconds** |
 
-The 7 skips are the database-backed functional tests; no Postgres was running.
-**Those still need to pass before the repository can be called verified**, and
-they are the API-compatibility evidence the whole demo rests on.
+Still to do: the Track B index and wheel need serving on the builder, then the
+remediated rebuild for Acts 3–4. Act 1's `10.1 → 10.2` rebuild is untested.
 
-The cherry-pick does not apply. Neither upstream fix commit lands on 2.11.3:
-3.1.x carries type annotations, f-strings and `pass_eval_context` where 2.11.3
-has `evalcontextfilter` and `iteritems()`. The conflicts are era-related rather
-than semantic — the security logic is four lines and identical — so the resolved
-backport is committed as a patch in `patches/`, with its provenance in the
-header, and `make-lightwell-wheel.sh` applies it by default.
+### The cherry-pick does not apply
 
-One consequence worth knowing before recording: the backport must be the
-**cumulative 3.1.4** behaviour, not just 3.1.3. `tests/test_cve.py` parametrises
-over all four illegal characters, and a space-only backport fails three of them
-in the remediated state.
+Neither upstream fix commit lands on 2.11.3: 3.1.x carries type annotations,
+f-strings and `pass_eval_context` where 2.11.3 has `evalcontextfilter` and
+`iteritems()`. The conflicts are era-related rather than semantic — the security
+logic is four lines and identical — so the resolved backport is committed as a
+patch in `patches/`, with its provenance in the header, and
+`make-lightwell-wheel.sh` applies it by default.
+
+The backport must be the **cumulative 3.1.4** behaviour, not just 3.1.3.
+`tests/test_cve.py` parametrises over all four illegal characters, and a
+space-only backport fails three of them in the remediated state.
+
+---
+
+## This lab
+
+Concrete values for the environment this was built in. Everything is
+parameterised, so none of it is load-bearing in the code.
+
+| | |
+|---|---|
+| Hypervisor | `192.168.1.57`, RHEL 9.8, 20 cores / 124 GB, guest storage on `/home/vms` |
+| Builder | `build.homelab.com` / `192.168.122.195`, RHEL 9.8 — also a guest |
+| `im-train` | `192.168.122.51`, 2 vCPU / 4 GB / 40 GB |
+| `im-train-db` | `192.168.122.52`, 2 vCPU / 4 GB / 30 GB |
+| Registry | `quay.io/rhte2023` — `baseos`, `im-train`, `im-train-db`, all public |
+| Login | `rhel-admin`, SSH key plus a console password |
+
+Three things about this topology are worth knowing because they cost time to
+discover:
+
+**The builder is itself a guest**, so `reset.sh` and `post-provision.sh` drive
+libvirt remotely via `VIRSH_URI=qemu+ssh://…`. That needs the remote user in the
+`libvirt` group — without it polkit refuses with *"no polkit agent available"*
+even though SSH and `sudo` both work perfectly.
+
+**The libvirt network is `<forward mode='route'/>` with no DHCP range**, only
+static host entries. So guests get no lease and no default route unless you give
+them one. The two demo guests use `ip-dhcp-host` reservations added with
+`virsh net-update --live --config`, which needs no network restart and so never
+disturbs anything else already running on that network.
+
+**`podman login` as root writes to `/run`, which is tmpfs.** Registry
+credentials vanish on reboot. Log in with
+`REGISTRY_AUTH_FILE=/root/.docker/config.json` so podman finds them afterwards
+from its persistent fallback path.
 
 ---
 
