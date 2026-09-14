@@ -228,13 +228,19 @@ This is the strongest thirty seconds available to you, and it was a lucky
 accident of packaging. The host carries jinja2 **twice**:
 
 ```
-  jinja2 3.1.6    REJECTED   ValueError: Invalid character in attribute name
-  jinja2 2.11.3   EMITTED    ' data-track id="1"'
+  jinja2 3.1.6    SAFE        refuses to render - ValueError: Invalid character in attribute name
+  jinja2 2.11.3   VULNERABLE  emits it anyway - ' data-track id="1"'
 ```
 
 The first is `python3-jinja2`, an RPM that cloud-init pulled in. Red Hat's, and
 patched. The second is in `/opt/app/venv`, from `requirements.txt`. Yours, and
 untouched by anything the OS provides.
+
+**Explain what SAFE means, or it reads backwards.** The patched library
+*refuses to render* — it raises rather than emitting markup a browser will
+misparse. A space is illegal in an HTML attribute name, so a browser ends the
+name at the space and treats the rest as a **separate attribute** — which is
+how an attacker gets to inject one of their own. Failing closed is the fix.
 
 > "Same machine. Same library. Same CVE. Red Hat patched the copy they ship.
 > Nobody patched the copy I ship — and that boundary is exactly what a RHEL
@@ -242,6 +248,34 @@ untouched by anything the OS provides.
 
 This reframes the whole demo as *not* a criticism of RHEL, which lands far
 better with an infrastructure audience.
+
+### Then answer the question it provokes
+
+Someone will say: *there is a patched 3.1.6 right there, why not just use it?*
+The script prints the answer, and three of the four points are checked live:
+
+1. **It IS 3.1.6.** Using it *is* the 3.1.x migration — `contextfunction`
+   removed, `Markup` moved to markupsafe, autoescape defaults changed. Same
+   code change, same regression cycle, same change board.
+2. **The OS markupsafe is 2.1.3; this app needs 2.0.1.** Jinja2 2.11 imports
+   `soft_unicode`, which markupsafe 2.1 removed. The OS versions are actively
+   incompatible with the pinned application.
+3. **It only helps for jinja2.** RHEL 10 ships **no RPM at all** for `fastapi`,
+   `uvicorn`, `starlette`, `psycopg` or `pydantic` — four of five runtime
+   dependencies. Verified on the host.
+4. **The venv exists so dependencies are pinned and reproducible.** Tracking
+   whatever the OS happens to ship makes the application's behaviour a function
+   of the RHEL minor release.
+
+Point 3 is the one to land:
+
+> "Even if I gave up my pinning and used Red Hat's copy, it only covers one of
+> my five dependencies. There is no RPM for the other four. This boundary is
+> not something I can opt out of by being clever."
+
+**Trap:** this scene only works from a vulnerable baseline. Run it after the
+remediation act and both copies correctly report SAFE, which destroys the
+contrast. The script now detects that and warns before continuing.
 
 ### The scanner
 
