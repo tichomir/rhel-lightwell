@@ -58,7 +58,39 @@ else
         || warn "entry present but mode is ${PERM} - should be 600"
 fi
 
-head_ "2. does the index answer?"
+head_ "2. which repository tiers exist at all?"
+# Probed 2026-09-14 from this lab, unauthenticated. 401 means the path exists
+# and wants credentials; 404 means it is not there.
+#
+#   lightwell/python/validated/    401  exists
+#   lightwell/java/validated/      401  exists
+#   lightwell/python/remediated/   404  DOES NOT EXIST
+#   lightwell/maven/...            404  the ecosystem segment is java, not maven
+#
+# So at that point only the Validated tier was being served, and this demo
+# needs Remediated - the tier carrying the .rhlw backports. Either the path is
+# named something else or it is not live yet. That is a question for Ben
+# Breard or the Lightwell Network docs, not something to brute-force against
+# someone else's server.
+#
+# Validated is upstream-parity: signed, SBOM, SLSA L3, but the SAME version.
+# It cannot deliver this demo, which turns on getting a FIX without a version
+# change. Do not be tempted to substitute it.
+for tier in validated remediated; do
+    U="https://${MACHINE}/lightwell/python/${tier}/"
+    C=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "${U}" 2>/dev/null || echo 000)
+    printf '  %-56s %s\n' "${tier}" "${C}"
+    if [[ "${tier}" == "remediated" && "${C}" == "404" ]]; then
+        fail "the Remediated tier is not served at that path.
+        Validated is, which shows the host and your network are fine - so this
+        is about the URL or about availability, not about connectivity.
+        Ask what the Remediated index URL is, then re-run with INDEX=<url>.
+        Do NOT substitute Validated: it ships upstream-parity versions, and
+        this demo turns on getting a fix WITHOUT a version change."
+    fi
+done
+
+head_ "2b. does the configured index answer?"
 # -n makes curl read ${NETRC}. Without credentials this is a 401, which is a
 # different and much more useful answer than a timeout.
 CODE=$(curl -sn -o /dev/null -m 20 -w '%{http_code}' "${INDEX}" 2>/dev/null || echo 000)
