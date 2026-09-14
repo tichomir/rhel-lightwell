@@ -12,9 +12,9 @@ production, with no upgrade and no code change.
 
 ## Status
 
-**Built and running. Acts 0–2 are ready to film.** Both image-mode guests are
-provisioned, the app serves the Status page against a live database, the CVE
-observable is reachable, and the retake loop is verified.
+**Built, running, and Acts 0-4 all verified end to end on real hardware.**
+Both image-mode guests are provisioned, the OS patch and the application patch
+both travel the same path, and the retake loop is six seconds.
 
 | Check | Result |
 |---|---|
@@ -32,9 +32,13 @@ observable is reachable, and the retake loop is verified.
 | OS act: `10.1 → 10.2` rebuild, promote, `bootc upgrade` | Yes — `os_version` moves, app unaffected |
 | `bootc rollback` and forward again | Yes — **2.9s**, no download |
 | grype scans, all four views | Yes — numbers in the runbook are measured |
+| Track B index serving over TLS | Yes — `pip index versions` sees only `2.11.3+rhlw00001` |
+| Remediated build, unmodified suite | **20 passed** — identical to the vulnerable state |
+| App patch deployed via `bootc upgrade` | Yes — **20s / 31.5 MB**, CVE observable gone |
+| `/var` survives, db tier never moves | Yes — bookings intact, `rollback: null` on the db |
 
-Still to do: the Track B index needs serving on the builder, then the
-remediated rebuild for Acts 3–4.
+Still to do: Act 5 is slides. Track A needs `LW00007` before the remediation
+scene can be filmed against the real index rather than the lab mirror.
 
 See [RUNBOOK.md](RUNBOOK.md) for the per-act recording script.
 
