@@ -9,12 +9,12 @@ Every command, in order, with measured timings and the traps that cost takes.
 | 0 — Baseline | **Verified end to end.** Ready to film. |
 | 1 — The OS CVE | **Verified end to end**, including rollback and forward again. |
 | 2 — The app CVE | **Verified.** Scans run, numbers below are measured, not estimated. |
-| 3 — Lightwell remediation | Backport verified; index not yet stood up. **Do not film yet.** |
-| 4 — Patch to production | Depends on Act 3. **Not yet verified.** |
+| 3 — Lightwell remediation | **Verified end to end.** TLS index serving, one-line pin, tests green, grype still red. |
+| 4 — Patch to production | **Verified end to end.** 20s upgrade, CVE observable gone, `/var` survived, db tier untouched. |
 | 5 — The clock | Slides only. |
 
-Anything marked unverified below has not been run on this hardware. Treat the
-timings in those sections as guesses.
+Every timing below was measured on this hardware. Nothing in Acts 0-4 is an
+estimate.
 
 ---
 
@@ -37,14 +37,15 @@ Then check these by hand:
 - [ ] Pin the base by digest if a rebuild mid-series would be fatal:
       `10.1 = sha256:a16e6053…84a8a`, `10.2 = sha256:eb55df15…9bb1e`
 
-### The two snapshots you have
+### The three snapshots you have
 
 | Snapshot | State |
 |---|---|
 | `act0-baseline` | RHEL 10.1, jinja2 2.11.3 vulnerable, db seeded, timer off |
 | `act1-done` | RHEL 10.2, jinja2 2.11.3 still vulnerable, rollback to 10.1 available |
+| `act3-done` | RHEL 10.2, jinja2 2.11.3+rhlw00001, probe rejects, remediated |
 
-Reverting either takes **under a second** and the guest resumes *already
+Reverting any of them takes **under a second** and the guest resumes *already
 running*, because these are internal snapshots carrying RAM state.
 
 ```bash
@@ -55,6 +56,11 @@ ssh im-builder 'cd ~/rhel-lightwell && VIRSH_URI=qemu+ssh://tichomir@192.168.122
 ```bash
 # reset to the start of Act 2, skipping Act 1's 4-minute pull
 ssh im-builder 'cd ~/rhel-lightwell && VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system SNAP=act1-done ./scripts/reset.sh'
+```
+
+```bash
+# jump to the remediated end state, for re-shooting Act 4's verification
+ssh im-builder 'cd ~/rhel-lightwell && VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system SNAP=act3-done ./scripts/reset.sh'
 ```
 
 Full reset measured at **6 seconds**: revert, re-disable the timer, reseed the
@@ -311,69 +317,189 @@ Walk them with the evidence already on screen:
 
 ---
 
-## Act 3 — Lightwell remediation · **NOT YET BUILT**
+## Act 3 — Lightwell remediation · ~10 min · **verified**
 
-The backport itself is verified: `patches/0001-xmlattr-reject-invalid-attribute-names.patch`
-applies to 2.11.3, builds a wheel, and the unmodified test suite passes against
-it. What does not exist yet is the served index.
+Start from `act1-done`. The index runs on the builder and stays up across takes.
 
-Remaining work:
+### Stand up the index (once, before you record)
 
 ```bash
 ssh im-builder 'cd ~/rhel-lightwell && sudo ./scripts/make-lightwell-wheel.sh'
+```
+
+```bash
 ssh im-builder 'cd ~/rhel-lightwell && sudo ./scripts/serve-lightwell-mirror.sh'
 ```
 
-Then `images/app/pip.conf` switches to the Lightwell block, `requirements.txt`
-pins `jinja2==2.11.3+rhlw00001`, and the image rebuilds.
+Serves `https://lightwell.homelab.com/simple/` over TLS. **Keep the diff open in
+an editor** — 22 insertions in one file, and fifteen seconds of it on screen is
+worth a paragraph of narration:
 
-**Two things to settle before filming this act:**
+```bash
+ssh im-builder 'cd /tmp/lightwell-backport && git --no-pager diff 2.11.3 -- src/jinja2/filters.py'
+```
 
-1. **`pip.conf` and the mirror disagree on protocol.** The example points at
-   `https://lightwell.homelab.com/simple/`; the mirror serves plain HTTP on
-   8080. Needs a TLS proxy, or the URL changed to `http://…:8080`.
-2. **Podman build containers do not inherit `/etc/hosts`.** The `pip install`
-   runs *inside* the build, so resolving `lightwell.homelab.com` needs
-   `--add-host lightwell.homelab.com:192.168.122.195` on the `podman build`.
-   `build-and-push.sh` does not do this yet.
+> "That is the entire patch. Four lines of security logic, in the version I
+> already run. Not a new major release with a migration attached to it."
 
-**The integrity rule:** never show a `packages.redhat.com` URL while resolving
-from `lightwell.homelab.com`. Either wait for LW00007 and film against the real
-index, or caption this scene unambiguously as a lab mirror.
+### Show the index has it
 
----
+```bash
+ssh im-builder 'curl -s https://lightwell.homelab.com/simple/jinja2/ | grep -o "jinja2-[^\"<#]*" | head -1'
+```
 
-## Act 4 — Patch to production · **NOT YET VERIFIED**
+```bash
+ssh im-builder 'sudo podman run --rm --network host registry.access.redhat.com/ubi9/python-312 pip index versions jinja2 --index-url https://lightwell.homelab.com/simple/ --trusted-host lightwell.homelab.com'
+```
 
-Will reuse Act 1's mechanism exactly — that is the point of it. Expected:
+Output is one line: `Available versions: 2.11.3+rhlw00001`. Clean screen.
+
+### The one-line change
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && sed -i "s/^jinja2==2.11.3$/jinja2==2.11.3+rhlw00001/" requirements.txt && git --no-pager diff requirements.txt'
+```
+
+```diff
+-jinja2==2.11.3
++jinja2==2.11.3+rhlw00001
+```
+
+**The repository stays pinned at `2.11.3` on purpose**, so a fresh clone
+reproduces the Act 0 baseline. This edit is made live and not committed.
+
+**Worth knowing, and stronger than the deck claims:** you do not strictly need
+this edit at all. Verified on this pip — `jinja2==2.11.3` resolves to
+`2.11.3+rhlw00001` when that is the only candidate on the index, because PEP 440
+lets a plain `==` specifier match a local version. So the honest framing is:
+
+> "I am changing the line to be explicit and auditable. But I could have changed
+> nothing at all — point pip at the Remediated index and the pin I already have
+> picks up the backport. That is what drop-in actually means."
+
+### Rebuild
 
 ```bash
 ssh im-builder 'cd ~/rhel-lightwell && sudo NS=quay.io/rhte2023 VER=1.2 BASE_TAG=10.2 BUILD_DB=no ./scripts/build-and-push.sh'
-ssh im-builder 'cd ~/rhel-lightwell && sudo NS=quay.io/rhte2023 VER=1.2 ./scripts/promote.sh'
-ssh im-train 'sudo bootc upgrade && sudo systemctl reboot'
 ```
 
-Then: `os_version` **unchanged** at 10.2, `jinja2` now `2.11.3+rhlw00001`,
-`remediated: true`, `probe.unsafe_key_emitted` **false**, bookings still in the
-database because `/var` survived while `/usr` was replaced.
+**Measured: 1m22s.** The `baseos` layers are cached, so this is much faster than
+Act 1. Watch for `== dependency state: remediated ==` in the first line of
+output, and for pip downloading
+`jinja2-2.11.3%2Brhlw00001-py2.py3-none-any.whl` from `lightwell.homelab.com`.
+
+### The proof that matters — the unchanged test suite
+
+```bash
+ssh im-builder 'sudo podman run --rm --network host --user root --security-opt label=disable -v /home/rhel-admin/rhel-lightwell:/src:ro -e IM_TRAIN_DB_URL="postgresql://imtrain:imtrain@im-train-db.homelab.com:5432/imtrain" -e PIP_INDEX_URL="https://lightwell.homelab.com/simple/" -e PIP_EXTRA_INDEX_URL="https://pypi.org/simple/" -e PIP_TRUSTED_HOST="lightwell.homelab.com" registry.access.redhat.com/ubi9/python-312 bash -c "cp -r /src /tmp/w && cd /tmp/w && python3 -m venv .v && . .v/bin/activate && pip install -q -r requirements-dev.txt && pip show jinja2 | grep -i ^version && python3 -m pytest -q --expect=remediated"'
+```
+
+**Measured: `Version: 2.11.3+rhlw00001`, then `20 passed`.**
+
+Against the live database, the vulnerable state gives **20 passed** and the
+remediated state gives **20 passed**. Same file, not edited between runs.
+
+> "Same API. Same tests. Same file — I did not touch it. That is the whole
+> claim, and it is the only evidence for it that is worth anything, because the
+> scanner is about to tell you I failed."
+
+### Then the scanner, still red
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && ./scripts/scan.sh quay.io/rhte2023/im-train:1.2 jinja2'
+```
+
+```
+  CVE              SEVERITY CVSS  INSTALLED          FIXED IN
+  CVE-2024-22195   Medium   5.4   2.11.3+rhlw00001   3.1.3
+  CVE-2024-34064   Medium   5.4   2.11.3+rhlw00001   3.1.4
+  CVE-2024-56326   Medium   7.8   2.11.3+rhlw00001   3.1.5
+  CVE-2025-27516   Medium   5.4   2.11.3+rhlw00001   3.1.6
+```
+
+Note the `INSTALLED` column. The scanner **sees** the remediated artifact and
+still calls it vulnerable, because there is no public security feed telling it
+what `+rhlw00001` contains.
+
+Do not hide this. Run it deliberately, and land the four points in order:
+
+1. The scanner is still red. Here is exactly why.
+2. The test suite is green, and the CVE observable is gone — show the probe.
+3. A VEX statement is where this is heading: a machine-readable assertion that
+   this artifact is remediated.
+4. **Your scanner report and your actual risk are not the same document.**
+
+If you made the Act 2 point about 161 Go-module false positives in Red Hat's
+own binaries, you can now close the loop: same tool, same blind spot, and you
+called it ten minutes ago.
+
+### The integrity rule
+
+Never show a `packages.redhat.com` URL while resolving from
+`lightwell.homelab.com`. The lab index is deliberately indistinguishable from
+the real one on camera, which is exactly why this matters. Either wait for
+LW00007 and film this scene against Track A, or caption it unambiguously.
+
+---
+
+## Act 4 — Patch to production · ~8 min · **verified**
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && sudo NS=quay.io/rhte2023 VER=1.2 ./scripts/promote.sh'
+```
+
+```bash
+ssh im-train 'sudo bootc upgrade'
+```
+
+**Measured: 20 seconds.** This is the best surprise in the whole demo. Act 1
+pulled 950 MB and took four minutes; this changed **8 layers and 31.5 MB**,
+because every base OS layer was already on disk.
+
+> "The OS patch was a 950-megabyte pull. The application patch is thirty-one
+> megabytes and twenty seconds — same command, same tag, same rollback."
+
+```bash
+ssh im-train 'sudo systemctl reboot'
+```
+
+### The money screen
+
+```bash
+ssh im-train 'curl -sS http://localhost:8080/api/status | jq .'
+```
+
+Measured, all on one page:
+
+| Field | Value |
+|---|---|
+| `os_version` | `10.2` — **unchanged**. The OS did not move. |
+| `image_version` | `1.2` |
+| `jinja2` | **`2.11.3+rhlw00001`** |
+| `lightwell.remediated` | **`true`** |
+| `probe.unsafe_key_emitted` | **`false`** |
+| `probe.rejected_with` | `ValueError: Invalid character in attribute name` |
+| `database.available` | `true` |
+| `rollback_available` | `true` |
+
+### Persistence and blast radius
+
+```bash
+ssh im-train 'curl -sS http://localhost:8080/api/bookings | jq -c "[.[] | {reference, passenger_name}]"'
+```
+
+Bookings are still there. `/var` survived while `/usr` was replaced.
 
 ```bash
 ssh im-train-db 'sudo bootc status'
 ```
 
-Shows the database tier never moved. Different tier, independent lifecycle,
-zero blast radius.
+`rollback: null` — this tier has **never been upgraded**. Different tier,
+independent lifecycle, zero blast radius, and it is on screen rather than
+claimed.
 
-And re-run the tests unchanged — that is the proof that matters:
-
-```bash
-ssh im-builder 'cd ~/rhel-lightwell && sudo podman run --rm --network host --user root --security-opt label=disable -v /home/rhel-admin/rhel-lightwell:/src:ro -e IM_TRAIN_DB_URL="postgresql://imtrain:imtrain@im-train-db.homelab.com:5432/imtrain" registry.access.redhat.com/ubi9/python-312 bash -c "cp -r /src /tmp/w && cd /tmp/w && python3 -m venv .v && . .v/bin/activate && pip install -q -r requirements-dev.txt && python3 -m pytest -q --expect=remediated"'
-```
-
-Baseline for comparison: the same command with `--expect=vulnerable` currently
-gives **20 passed, 0 skipped** against the live database.
-
-**Then re-run grype and show it still red.** Do not hide this.
+> "From the platform team's point of view, an application CVE fix and an OS CVE
+> fix are now the same operation. And the tier I did not touch, I did not touch."
 
 ---
 
@@ -385,11 +511,14 @@ Measured, real numbers from this environment:
 
 | Step | Time |
 |---|---|
-| Rebuild image on a new base and push | 3m20s |
+| Rebuild on a **new base OS** and push | 3m20s |
+| Rebuild with a **remediated dependency** and push | 1m22s |
 | Promote (`skopeo copy`) | under 1s |
-| `bootc upgrade` (950 MB pull) | 4m |
+| `bootc upgrade` — OS change, 950 MB | 4m |
+| `bootc upgrade` — **app dependency only, 31.5 MB** | **20s** |
 | Reboot to healthy app | ~40s |
 | `bootc rollback` | 2.9s |
+| Backported wheel: patch, build, publish | ~30s |
 | Full environment reset between takes | 6s |
 
 So a genuine patch-to-production is **under ten minutes of wall clock**, and
@@ -428,3 +557,34 @@ Things the proposal and build guide get wrong, found by running them:
 | Guest has no network after reprovision | libvirt network is routed with no DHCP range | Reservations exist for these two MACs; a *new* guest needs `virsh net-update default add ip-dhcp-host` |
 | App fails on first boot after a rebuild | SELinux labels on `/opt/app` | `semanage fcontext` + `restorecon` are in the Containerfile, but verify in rehearsal, not on camera |
 | grype still reports the CVE after remediation | No Lightwell data in public vulnerability feeds | **Expected. Do not fix it.** It is Act 3's best moment |
+
+---
+
+## One thing found late, worth knowing
+
+The app Containerfile used to `COPY` the index credentials in and `rm` them in a
+later layer. That leaks: a `COPY` writes the file into its own layer, and the
+later removal only hides it from the final filesystem. Recoverable in two
+commands:
+
+```bash
+skopeo copy containers-storage:quay.io/rhte2023/im-train:1.2 dir:/tmp/x
+grep -rl 'password' /tmp/x
+```
+
+On a bootc base it is worse than it looks, because `/root` is a symlink to
+`/var/roothome` — so the credential lands at `var/roothome/.netrc`, which is
+neither the path the `rm` appears to target nor the path you would think to
+check.
+
+These images go to **public** quay repositories. With the lab mirror that
+published `demo/demo`. With Track A it would have published a real Red Hat
+Registry Service Account token.
+
+Now fixed: credentials go in as `--mount=type=secret`, which is never committed
+to a layer, and the fix is verified by the same grep finding nothing.
+
+**If you switch to Track A, rotate the service account token first.** The
+earlier `im-train:1.2` manifest was pushed to a public repo before this was
+fixed, and even though the tag has been overwritten, treat anything that was in
+that file as disclosed.
