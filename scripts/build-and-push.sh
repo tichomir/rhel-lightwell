@@ -12,6 +12,11 @@ NS="${NS:?Set NS, e.g. NS=quay.io/tichomir}"
 VER="${VER:-1.0}"
 BASE_TAG="${BASE_TAG:-10.1}"
 BUILD_DB="${BUILD_DB:-yes}"
+# PUSH=no builds without touching the registry. Useful before registry
+# permissions are sorted, and for the first provisioning pass: the qcow2 build
+# reads from local podman storage with --local, so the hosts only need the
+# registry once they start doing `bootc upgrade`.
+PUSH="${PUSH:-yes}"
 
 cd "$(dirname "$0")/.."
 
@@ -52,6 +57,19 @@ podman build \
 if [[ "${BUILD_DB}" == "yes" ]]; then
     echo "== im-train-db:pg16 =="
     podman build -t "${NS}/im-train-db:pg16" -f "${TMP}/db.Containerfile" .
+fi
+
+if [[ "${PUSH}" != "yes" ]]; then
+    cat <<NEXT
+
+Built locally; PUSH=no, so the registry was not touched.
+
+  $(podman images --format '{{.Repository}}:{{.Tag}}  {{.Size}}' | grep -E "${NS##*/}|im-train|baseos" | sed 's/^/  /')
+
+Provision from local storage with bootc-image-builder --local, or rerun with
+PUSH=yes once the registry accepts the push.
+NEXT
+    exit 0
 fi
 
 echo "== push =="
