@@ -29,9 +29,14 @@ observable is reachable, and the retake loop is verified.
 | App → database across tiers | Yes — PostgreSQL 16.14 |
 | Snapshot revert actually discards changes | Yes — tested with a marker file |
 | `reset.sh` end to end | **~6 seconds** |
+| OS act: `10.1 → 10.2` rebuild, promote, `bootc upgrade` | Yes — `os_version` moves, app unaffected |
+| `bootc rollback` and forward again | Yes — **2.9s**, no download |
+| grype scans, all four views | Yes — numbers in the runbook are measured |
 
-Still to do: the Track B index and wheel need serving on the builder, then the
-remediated rebuild for Acts 3–4. Act 1's `10.1 → 10.2` rebuild is untested.
+Still to do: the Track B index needs serving on the builder, then the
+remediated rebuild for Acts 3–4.
+
+See [RUNBOOK.md](RUNBOOK.md) for the per-act recording script.
 
 ### The cherry-pick does not apply
 
