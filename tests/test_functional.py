@@ -126,7 +126,17 @@ def test_search_rejects_same_station():
 
 
 @needs_db
-def test_book_then_retrieve():
+def test_book_then_retrieve(cleanup_bookings):
+    """Books a ticket and reads it back, then removes it again.
+
+    The cleanup is not tidiness, it is determinism. This suite runs against the
+    LIVE demo database, and Act 3's proof is running it unchanged. Without the
+    teardown every run leaves an "Integration Test" booking behind, so the
+    booking list on the Act 4 screen grows by one per take and no two takes
+    match - which is exactly what the recording checklist forbids.
+
+    The assertions still exercise the full write path; only the row is removed.
+    """
     services = client.post("/api/search", json={
         "origin": "OSR", "destination": "PRG", "travel_date": "2026-10-01",
     }).json()
@@ -139,6 +149,7 @@ def test_book_then_retrieve():
     assert created.status_code == 200
     reference = created.json()["reference"]
     assert reference.startswith("IMT-")
+    cleanup_bookings(reference)
 
     listed = client.get("/api/bookings").json()
     assert reference in {b["reference"] for b in listed}
