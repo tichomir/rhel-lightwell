@@ -316,6 +316,41 @@ ecosystem will spot that.
 repositories at all, so `rpm -q` only tells you what is installed, never what
 exists. Check inside a repo-enabled RHEL 10 container.
 
+### What "exploitable" actually means
+
+```bash
+ssh im-train 'sudo bash -s' < scripts/show-injection.sh
+```
+
+The coverage-gap scene proves the unsafe attribute *name* survives. On its own
+that is abstract. This closes the gap by putting an HTML parser on the same
+string:
+
+```
+  author wrote    1 attribute
+  parser reports  2 attributes
+     'data-track'    = None
+     'data-injected' = '1'   <-- the author never wrote this
+```
+
+> "One attribute went in. The parser sees two, and the second one was chosen by
+> whoever supplied that key. That is the vulnerability, in full."
+
+**It stops there on purpose, and say so.** The injected attribute is
+`data-injected` and it does nothing. Substituting an event-handler attribute is
+what makes it stored XSS — a one-word change for an attacker, and one you do
+not need to perform to have proved the point. There is no working exploit in
+the repository or in the recording, because a recording gets forwarded and
+re-shown without you in the room.
+
+Then the line that buys you credibility:
+
+> "And the 7.8 in that grype report is a sandbox escape. That is the serious
+> one, and it is deliberately not what I just showed you."
+
+The script refuses to mislead if run on a remediated build — it reports the
+`ValueError` and tells you to revert.
+
 ### The scanner
 
 ```bash
