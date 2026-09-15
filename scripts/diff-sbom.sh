@@ -34,9 +34,22 @@ for f in "${A}" "${B}"; do
 done
 
 # name<TAB>version, sorted and deduplicated, so comm can do the set arithmetic.
+#
+# Excludes the package the document DESCRIBES - the image itself. syft
+# catalogues it as a package alongside its contents, so an image whose only
+# real change is one library reports TWO changed components: the library, and
+# the image's own tag moving 1.1 -> 1.2.
+#
+# That inflation lands squarely on the claim this diff exists to prove, so the
+# self-reference is identified properly via the SPDX DESCRIBES relationship
+# rather than pattern-matched out of the name.
 extract() {
-    jq -r '.packages[] | select(.name != null)
-           | "\(.name)\t\(.versionInfo // "-")"' "$1" | sort -u
+    jq -r '
+      [.relationships[]? | select(.relationshipType == "DESCRIBES") | .relatedSpdxElement] as $roots
+      | .packages[]
+      | select(.name != null)
+      | select(($roots | index(.SPDXID // "")) == null)
+      | "\(.name)\t\(.versionInfo // "-")"' "$1" | sort -u
 }
 
 TMP=$(mktemp -d); trap 'rm -rf "${TMP}"' EXIT
