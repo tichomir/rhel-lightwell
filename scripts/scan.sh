@@ -147,8 +147,8 @@ jinja2|subject)
               (([.vulnerability.cvss[]?.metrics.baseScore]|max) // "n/a" | tostring),
               .artifact.version,
               (.vulnerability.fix.versions|join(","))] | @tsv' "${CACHE}" \
-      | sort -u | awk -F'\t' 'BEGIN{printf "  %-16s %-8s %-5s %-10s %s\n","CVE","SEVERITY","CVSS","INSTALLED","FIXED IN"}
-                               {printf "  %-16s %-8s %-5s %-10s %s\n", $1,$2,$3,$4,$5}'
+      | sort -u | awk -F'\t' 'BEGIN{printf "  %-16s %-8s %-5s %-18s %s\n","CVE","SEVERITY","CVSS","INSTALLED","FIXED IN"}
+                               {printf "  %-16s %-8s %-5s %-18s %s\n", $1,$2,$3,$4,$5}'
     echo
     echo "  Every fix is in the 3.1.x line. There is no 2.11.x that resolves these,"
     echo "  which is the entire reason this demo exists."

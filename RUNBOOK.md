@@ -497,8 +497,15 @@ ssh im-builder 'cd /tmp/lightwell-backport && git --no-pager diff 2.11.3 -- src/
 ### Show the index has it
 
 ```bash
-ssh im-builder 'curl -s https://lightwell.homelab.com/simple/jinja2/ | grep -o "jinja2-[^\"<#]*" | head -1'
+ssh im-builder 'curl -sS --cacert /srv/lightwell-mirror/tls/tls.crt https://lightwell.homelab.com/simple/jinja2/ | grep -o "jinja2-[^\"<#]*" | head -1'
 ```
+
+**`--cacert` is not optional here.** The lab certificate is self-signed, so a
+bare `curl -s` fails verification and — because `-s` suppresses the error —
+prints *nothing at all*. On camera that reads as a broken index, and you will
+debug a working service live. Pin the cert rather than passing `-k`: it shows
+verification **succeeding** against a known CA, which is the honest picture and
+a better one.
 
 ```bash
 ssh im-builder 'sudo podman run --rm --network host registry.access.redhat.com/ubi9/python-312 pip index versions jinja2 --index-url https://lightwell.homelab.com/simple/ --trusted-host lightwell.homelab.com'
