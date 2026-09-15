@@ -36,9 +36,17 @@
 # One is "just upgrade it" and one is not, on the same screen, in the same
 # application. That is the whole Lightwell argument without a slide.
 #
-# NOTE ON SEVERITY: the jinja2 findings are Medium (CVSS 5.4), except
-# CVE-2024-56326 at 7.8 - the sandbox escape, and the serious one. If the deck
-# says "high severity", fix the deck: the terminal will contradict it.
+# NOTE ON SEVERITY, AND THE TOOLS DISAGREE: three of the four jinja2 findings
+# are CVSS 5.4 (Medium). CVE-2024-56326 is CVSS 7.8, which is HIGH by the CVSS
+# v3.1 band - the sandbox escape, and the serious one.
+#
+# grype labels that one "Medium" while printing 7.8 beside it, which is
+# inconsistent with its own number. Trusted Profile Analyzer reports it as
+# "High (7.8)", which is correct.
+#
+# So do not say "all Medium" either. Say three Medium and one High, and if both
+# tools are on screen, point at the disagreement - it is the same argument as
+# the rest of this act: the report is not the risk.
 set -uo pipefail
 
 TARGET="${1:-}"

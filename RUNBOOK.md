@@ -417,10 +417,15 @@ ssh im-builder 'cd ~/rhel-lightwell && ./scripts/scan.sh quay.io/rhte2023/im-tra
   CVE-2025-27516   Medium   5.4   2.11.3     3.1.6
 ```
 
-**Correction to the deck:** these are **Medium**, not "high severity". The deck
-says high; the terminal will say Medium and the audience will believe the
-terminal. The worst is CVE-2024-56326 at CVSS **7.8** — a sandbox escape, and
-the genuinely serious one. Say that precisely:
+**Be precise about severity, and expect the tools to disagree.** Three of the
+four are CVSS 5.4 (Medium). CVE-2024-56326 is CVSS **7.8**, which is **High**
+by the v3.1 band — the sandbox escape, and the genuinely serious one.
+
+grype labels that one *Medium* anyway, which contradicts the 7.8 it prints next
+to it. Trusted Profile Analyzer calls it **High (7.8)**, which is correct. If
+you show both tools, the labels differ on the same CVE — and that is itself
+worth pointing at, because it is the same argument as the rest of Act 2: the
+report is not the risk. Say it precisely:
 
 > "Four CVEs. The two I am going to demonstrate are the benign ones, because I
 > am not putting a working sandbox escape in a recording that gets forwarded.
@@ -802,7 +807,7 @@ Things the proposal and build guide get wrong, found by running them:
 
 | Document says | Reality |
 |---|---|
-| "four CVEs, high severity" | **Medium**, CVSS 5.4 — except CVE-2024-56326 at 7.8 |
+| "four CVEs, high severity" | **Three Medium** (CVSS 5.4) and **one High** (CVSS 7.8, CVE-2024-56326). Note grype labels the 7.8 one *Medium*, which disagrees with its own CVSS figure and with TPA |
 | "your scanner report on the OS is clean" | 21,063 findings, 1 Critical, 1,072 High |
 | `2.11.3+rhlw.00001` | Impossible. PEP 440 normalises it to `+rhlw.1`. Use `+rhlw00001` |
 | The upstream fix "cherry-picks cleanly" | It does not. Resolved patch is in `patches/` |
