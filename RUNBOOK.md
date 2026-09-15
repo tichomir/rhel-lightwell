@@ -580,6 +580,63 @@ If you made the Act 2 point about 161 Go-module false positives in Red Hat's
 own binaries, you can now close the loop: same tool, same blind spot, and you
 called it ten minutes ago.
 
+### The SBOM diff — the only claim they can verify without you
+
+Generate once, before recording:
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && for i in baseos:10.1 baseos:10.2 im-train:1.1 im-train:1.2; do sudo ./scripts/make-sbom.sh quay.io/rhte2023/$i; done'
+```
+
+Then put both diffs on one screen:
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && sudo ./scripts/diff-sbom.sh /srv/sboms/quay.io-rhte2023-baseos-10.1.spdx.json /srv/sboms/quay.io-rhte2023-baseos-10.2.spdx.json'
+```
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && sudo ./scripts/diff-sbom.sh /srv/sboms/quay.io-rhte2023-im-train-1.1.spdx.json /srv/sboms/quay.io-rhte2023-im-train-1.2.spdx.json'
+```
+
+Measured:
+
+| Change | Components affected |
+|---|---|
+| OS act — `baseos` 10.1 → 10.2 | **368** (346 changed, 22 removed) |
+| App act — vulnerable → remediated | **1** — `jinja2 2.11.3 → 2.11.3+rhlw00001` |
+
+> "Same command, same gate, same rollback. The OS patch moved three hundred and
+> sixty-eight components. The dependency fix moved one. And that is not me
+> telling you the patch scope — it is the diff between the two SBOMs of the
+> images you can pull yourself."
+
+**Why this is the strongest evidence in the demo.** The scope claim is made
+three times and provable once:
+
+| Artifact | Shows |
+|---|---|
+| `requirements.txt` one-line diff | what you *intended* |
+| `patches/0001` — 22 lines, one file | what the *library* changed |
+| **SBOM diff — one component** | what actually **shipped** |
+
+Only the third is verifiable by a customer's security team without trusting the
+presenter, because it is derived from the artifact rather than the intent.
+
+**Two things worth knowing:**
+
+The SBOM records **both** jinja2 instances — `pkg:pypi/jinja2@3.1.6` from the
+OS RPM and `pkg:pypi/jinja2@2.11.3` from the venv. The coverage-gap story is in
+the machine-readable artifact, not just the terminal, and TPA will see both.
+
+`diff-sbom.sh` excludes the image's own SBOM entry. syft catalogues the image
+as a package alongside its contents, so without that the remediated build
+reports *two* changed components — the library, and the image's own tag moving.
+That inflation lands squarely on the claim the diff exists to prove.
+
+**For TPA:** the SPDX files in `/srv/sboms/*.spdx.json` are the ingestible
+artifacts. The CycloneDX copies alongside them are for scanners and policy
+engines.
+
 ### The integrity rule
 
 Never show a `packages.redhat.com` URL while resolving from
