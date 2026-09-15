@@ -60,7 +60,7 @@ running*, because these are internal snapshots carrying RAM state.
 **To reset to the start of the whole demo, use `reset-demo.sh`, not `reset.sh`:**
 
 ```bash
-ssh im-builder 'cd ~/rhel-lightwell && sudo VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system ./scripts/reset-demo.sh'
+ssh im-builder 'cd ~/rhel-lightwell && VIRSH_URI=qemu+ssh://tichomir@192.168.122.1/system ./scripts/reset-demo.sh'
 ```
 
 `reset.sh` reverts the **guest only**. A demo run leaves two other pieces of
@@ -76,6 +76,11 @@ returns the builder to the vulnerable configuration, reverts the guest — then
 asserts the result really is a baseline and **refuses to declare readiness if
 it is not**. The check that matters most is `bootc upgrade --check` reporting
 *No changes*: nothing else catches a stale `:prod`.
+
+**Run it without `sudo`.** The registry write needs root (podman's auth is in
+`/root/.docker/config.json`) but `virsh` and the guest SSH need *your* key,
+which root does not have. The script escalates for the one step that needs it
+and refuses to start as root, because a half-done reset is worse than none.
 
 `build-and-push.sh` now also refuses outright if the pin says vulnerable while
 `pip.conf` points at a Lightwell index, so that mislabelled image cannot be

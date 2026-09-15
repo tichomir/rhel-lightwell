@@ -3,7 +3,17 @@
 #
 #   VIRSH_URI=qemu+ssh://user@hypervisor/system ./scripts/reset-demo.sh
 #
-# Run this from the builder before a recording session.
+# Run this from the builder before a recording session, WITHOUT sudo.
+#
+# The privileges are deliberately split, because the two halves need different
+# identities and running the whole thing as root breaks the second one:
+#
+#   registry write   needs root - podman's auth lives in /root/.docker/config.json
+#   virsh + ssh      needs YOUR user - root has no SSH key to the hypervisor
+#                    or the guests, so as root these fail with "Permission
+#                    denied (publickey)" and it looks like a libvirt problem
+#
+# So the script runs unprivileged and escalates only for the registry step.
 #
 # WHY THIS EXISTS, AND WHY reset.sh IS NOT ENOUGH
 #
@@ -25,6 +35,22 @@
 # part that actually protects the take.
 set -euo pipefail
 
+if [[ "${EUID}" -eq 0 ]]; then
+    cat >&2 <<'ASROOT'
+Do not run this with sudo.
+
+  virsh over qemu+ssh and the ssh calls to the guests use YOUR SSH key. root
+  does not have one, so as root they fail with "Permission denied (publickey)"
+  after the registry step has already succeeded - a confusing half-done reset.
+
+  Run it as your normal user:
+    VIRSH_URI=qemu+ssh://user@hypervisor/system ./scripts/reset-demo.sh
+
+  It escalates with sudo by itself for the one step that needs root.
+ASROOT
+    exit 2
+fi
+
 cd "$(dirname "$0")/.."
 
 NS="${NS:-quay.io/rhte2023}"
@@ -42,8 +68,8 @@ echo "== 1. moving :prod back to the vulnerable baseline (${BASELINE_VER}) =="
 # Stop BEFORE touching the guest if this fails. Reverting the guest while :prod
 # still points at a later image leaves a baseline that looks right on the
 # Status page and is wrong underneath - which is worse than not resetting.
-if ! COPY_ERR=$(skopeo copy "docker://${NS}/im-train:${BASELINE_VER}" \
-                            "docker://${NS}/im-train:prod" 2>&1 >/dev/null); then
+if ! COPY_ERR=$(sudo skopeo copy "docker://${NS}/im-train:${BASELINE_VER}" \
+                                 "docker://${NS}/im-train:prod" 2>&1 >/dev/null); then
     echo
     if grep -qi "read-only\|read only" <<<"${COPY_ERR}"; then
         cat >&2 <<REGISTRY_RO
@@ -71,8 +97,8 @@ REGISTRY_RO
     fi
     exit 1
 fi
-PROD_DIGEST=$(skopeo inspect "docker://${NS}/im-train:prod" | jq -r .Digest)
-PROD_STATE=$(skopeo inspect "docker://${NS}/im-train:prod" | jq -r '.Labels."net.rhlab.imtrain.dependency-state"')
+PROD_DIGEST=$(sudo skopeo inspect "docker://${NS}/im-train:prod" | jq -r .Digest)
+PROD_STATE=$(sudo skopeo inspect "docker://${NS}/im-train:prod" | jq -r '.Labels."net.rhlab.imtrain.dependency-state"')
 echo "   :prod -> ${PROD_DIGEST}  (${PROD_STATE})"
 [[ "${PROD_STATE}" == "vulnerable" ]] || {
     echo "   REFUSING: :prod is labelled '${PROD_STATE}', not 'vulnerable'." >&2
