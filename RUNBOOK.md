@@ -753,12 +753,17 @@ ssh im-builder 'cd ~/rhel-lightwell && sudo NS=quay.io/rhte2023 VER=1.2 ./script
 ssh im-train 'sudo bootc upgrade'
 ```
 
-**Measured: 20 seconds.** This is the best surprise in the whole demo. Act 1
-pulled 950 MB and took four minutes; this changed **8 layers and 31.5 MB**,
-because every base OS layer was already on disk.
+**Measured: 12–27 seconds.** This is the best surprise in the whole demo. Act 1
+pulled 950 MB and took minutes; this changed **7 layers and 27.1 MB**, because
+every base OS layer was already on disk.
 
-> "The OS patch was a 950-megabyte pull. The application patch is thirty-one
-> megabytes and twenty seconds — same command, same tag, same rollback."
+> "The OS patch was a 950-megabyte pull. The application patch is twenty-seven
+> megabytes and under half a minute — same command, same tag, same rollback."
+
+`bootc` prints `Total new layers: 78  Size: 950.7 MB` above those lines, which
+is the *whole image*, not the delta. The numbers to read out are **Added
+layers** and its size. Point at the right line on camera or you will undersell
+the entire act.
 
 ```bash
 ssh im-train 'sudo systemctl reboot'
@@ -779,7 +784,8 @@ Measured, all on one page:
 | `jinja2` | **`2.11.3+rhlw00001`** |
 | `lightwell.remediated` | **`true`** |
 | `probe.unsafe_key_emitted` | **`false`** |
-| `probe.rejected_with` | `ValueError: Invalid character in attribute name` |
+| `probe.rejected_with` | `ValueError` |
+| `probe.detail` | `Invalid character in attribute name: 'data-track id'` |
 | `database.available` | `true` |
 | `rollback_available` | `true` |
 
@@ -812,19 +818,22 @@ Measured, real numbers from this environment:
 
 | Step | Time |
 |---|---|
-| Rebuild on a **new base OS** and push | 1m–3m20s |
-| Rebuild with a **remediated dependency** and push | 37s–1m22s |
+| Rebuild on a **new base OS** and push | 22s–3m20s |
+| Rebuild with a **remediated dependency** and push | 26s–1m22s |
 | Promote (`skopeo copy`) | under 1s |
-| `bootc upgrade` — OS change, 950 MB | **2m51s–4m** |
-| `bootc upgrade` — **app dependency only, ~27–31 MB** | **15–20s** |
+| `bootc upgrade` — OS change, 950 MB | **2m32s–4m** |
+| `bootc upgrade` — **app dependency only, 27.1 MB** | **12–27s** |
 | Reboot to healthy app | ~40s |
-| `bootc rollback` | 2.9s |
+| `bootc rollback` | 3.2–4.2s |
+| SBOM generation per image (`make-sbom.sh`) | 52s–1m13s |
+| SBOM diff, either pair (`diff-sbom.sh`) | under 5s |
+| VEX generation + 16 CSAF checks (`make-vex.sh`) | under 2s |
 | Backported wheel: patch, build, publish | ~30s |
 | Full environment reset (`reset-demo.sh`) | 22s |
 | Quick revert between takes (`reset.sh`) | 6s |
 
-Ranges are from two full dry runs on consecutive days. The spread is real and
-worth knowing before you commit to a number on camera:
+Ranges are from three full dry runs. The spread is real and worth knowing
+before you commit to a number on camera:
 
 - **Builds** are fast when `baseos` is already cached and slow when the
   `rhel-bootc` base has to be pulled fresh (~1.6 GB). The first build of a

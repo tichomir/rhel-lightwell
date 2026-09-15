@@ -32,6 +32,12 @@ SSH_USER="${SSH_USER:-rhel-admin}"
 # That needs an SSH key to the hypervisor and the remote user in the `libvirt`
 # group - without the group, polkit refuses with "no polkit agent available"
 # even though SSH and sudo both work.
+#
+# Use the hypervisor's address ON THE LIBVIRT BRIDGE, not its LAN address. From
+# a guest on virbr0 the hypervisor is the bridge gateway - 192.168.122.1 here -
+# and its LAN IP is not routed. Pointing this at the LAN address fails with
+# "Cannot recv data: Host key verification failed", which reads like a libvirt
+# or key problem and is neither.
 VIRSH_URI="${VIRSH_URI:-}"
 VIRSH=(virsh)
 [[ -n "${VIRSH_URI}" ]] && VIRSH=(virsh -c "${VIRSH_URI}")
