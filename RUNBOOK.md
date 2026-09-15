@@ -33,6 +33,20 @@ Then check these by hand:
 - [ ] Terminal font 18, black background — matches your existing screenshots
 - [ ] Browser in a clean profile, no extensions, no unrelated tabs
 - [ ] No stray `latest` tags anywhere on screen
+- [ ] **Quay tag list trimmed**, so the acts visibly create things. Delete
+      `im-train:1.1` and `im-train:1.2` (and optionally `baseos:10.2`) in the
+      quay UI first — the robot has Write, not Delete, so this is a manual step.
+
+      Leave `im-train:1.0`, `im-train:prod`, `im-train-db:pg16` and
+      `baseos:10.1` **alone** — the first two are the baseline the reset
+      depends on, and the guests track the others.
+
+      The payoff: `im-train` opens showing only `1.0` and `prod`. Act 1 adds
+      `1.1`, Act 3 adds `1.2`, and Act 4 moves `prod` onto `1.2`'s digest —
+      so "promotion is a tag move" is something they watch rather than a claim.
+
+      Quay's Tag History tab still lists deleted tags with timestamps. Do not
+      open it on camera.
 - [ ] `date -Is` at the start and end of each act, on screen
 - [ ] Pin the base by digest if a rebuild mid-series would be fatal:
       `10.1 = sha256:a16e6053…84a8a`, `10.2 = sha256:eb55df15…9bb1e`
