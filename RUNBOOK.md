@@ -661,9 +661,15 @@ worth knowing before you commit to a number on camera:
 - **Builds** are fast when `baseos` is already cached and slow when the
   `rhel-bootc` base has to be pulled fresh (~1.6 GB). The first build of a
   session is the slow one.
-- **`bootc upgrade` for the OS act** varies with your link to quay — it is a
-  950 MB pull either way. This is the dead-air step; plan for 4 minutes and be
-  pleased with 3.
+- **`bootc upgrade` for the OS act** ranged from **1m to 4m** across three
+  runs, and the reason is worth exploiting: once the guest has pulled those
+  layers, a later upgrade to the same digest reuses its local bootc storage and
+  drops to about a minute.
+
+  **So do a full dry run before you record.** It is recommended anyway, and it
+  has the side effect of warming the guest's layer store — which turns the
+  biggest dead-air moment in the demo from four minutes into one. Do not prune
+  between the dry run and the take.
 - **`bootc upgrade` for the app act** is consistently 15–20s because only the
   application layers move. That number is safe to quote.
 
