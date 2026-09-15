@@ -233,7 +233,9 @@ jq -r '.vulnerabilities[]
 
 cat <<NEXT
 
-Upload to Trusted Profile Analyzer alongside the SBOM for the remediated image.
+Upload to Trusted Profile Analyzer as an ADVISORY, not through the SBOM path -
+CSAF VEX is an advisory document in TPA's model. Ingest it alongside the SBOM
+for the remediated image, or there is nothing for it to correlate against.
 
 Expected: the two xmlattr CVEs move to fixed for ${FIXED_VER}; the two sandbox
 escapes stay affected for BOTH versions - including the CVSS 7.8.
@@ -241,4 +243,9 @@ escapes stay affected for BOTH versions - including the CVSS 7.8.
 That partial result is the point. A blanket all-clear would be a false vendor
 statement, and "the backport covers what it covers" is what real VEX looks
 like. Say on camera that you wrote this document.
+
+The narration for this scene - what an SBOM and a VEX are in one breath each,
+and which half of it is real today - is in RUNBOOK.md under "The story to tell:
+two SBOMs and a VEX". Read it before the take; this document lands badly if the
+authorship is left ambiguous.
 NEXT

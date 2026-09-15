@@ -306,7 +306,7 @@ the Lightwell scene against the real index, or caption it unambiguously.
 ```
 
 **grype will still report the CVE after remediation.** It compares
-`2.11.3+rhlw.00001` against "fixed in 3.1.x" and concludes you are still
+`2.11.3+rhlw00001` against "fixed in 3.1.x" and concludes you are still
 vulnerable. It has no way to know the fix exists, because the Lightwell security
 feed is not yet in the public vulnerability databases — that work is in progress
 with osv.dev and is the prerequisite for any scanner to understand `.rhlw`
@@ -317,7 +317,9 @@ the most credible ninety seconds in the recording:
 
 1. Show the scanner still red. Explain why, plainly.
 2. Show the test suite green — API compatibility and the CVE observable.
-3. Show the VEX statement as where this is heading.
+3. Show the VEX statement as where this is heading — `scripts/make-vex.sh`
+   builds one, and the narration for it is in **RUNBOOK.md → "The story to tell:
+   two SBOMs and a VEX"**. Say on camera that you authored it.
 4. Land the point: your scanner report and your actual risk are not the same
    document.
 

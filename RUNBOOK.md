@@ -642,6 +642,91 @@ That inflation lands squarely on the claim the diff exists to prove.
 artifacts. The CycloneDX copies alongside them are for scanners and policy
 engines.
 
+### The story to tell: two SBOMs and a VEX
+
+You now have three documents on the build host and they only mean something if
+you can say what they are in one breath each. This is that script. It is the
+one part of the demo that is about where the industry is going rather than
+about what you just ran, so it is worth being fluent in.
+
+**Say it with a label and a recall notice.** The analogy holds all the way
+through, which is rare:
+
+| Document | In plain words |
+|---|---|
+| SBOM of `im-train:1.1` | the ingredients label on the box you shipped last week |
+| SBOM of `im-train:1.2` | the label on the box you shipped today |
+| The diff | the only two lines that differ between them — one ingredient |
+| The VEX | the manufacturer's notice saying *that* batch is not affected by the recall, and why |
+
+**The idea underneath it — this is the sentence the whole scene rests on:**
+
+> "A version number is not a statement about content. `2.11.3+rhlw00001` looks
+> like `2.11.3` to every scanner on earth, and that is not a bug — it is the
+> packaging spec working exactly as written. So somebody has to say, in a form
+> a machine can read, *this build carries the fix*. That statement is a VEX.
+> It cannot be inferred. It has to be published."
+
+That is why the scanner stayed red six minutes ago and why nothing you could
+have done to the version string would have changed it.
+
+#### Today, in this lab — and where it lands
+
+Be explicit about which half of this is real, because the difference is the
+entire ask:
+
+| | In this lab, today | Once Lightwell ships it |
+|---|---|---|
+| **The SBOMs** | I generate them with `syft`, after the fact, on my build host | Built and signed by the build system, attached to the image, pulled with it |
+| **The VEX** | **I wrote it.** `make-vex.sh`, in my own repo, publisher `rh-lab` | Authored by Red Hat Product Security and published to the CSAF feed |
+| **Getting it to the scanner** | `scp`, then a manual upload into TPA | TPA subscribes to the feed; it is already there before you ask |
+| **Who vouches for it** | me, on camera | the vendor, signed, with an errata behind it |
+
+**And the point that makes this credible rather than aspirational:** the pipe
+already exists. Red Hat has published machine-readable VEX for RHEL content at
+`security.access.redhat.com/data/csaf/v2/vex/` for years, and TPA ingests it
+today without being asked. What is missing is not the mechanism, the format, or
+the tooling — it is Lightwell content being carried *in* it.
+
+> "None of this is a new idea I am proposing. Every RHEL CVE you have ever
+> triaged already came to you this way. What I hand-wrote this morning is the
+> one document that isn't published yet — and that gap is the whole of what I
+> am asking for."
+
+#### Why the VEX says two, not four
+
+Read it out loud rather than glossing it, because this is the part that earns
+the rest:
+
+| CVE | | |
+|---|---|---|
+| CVE-2024-22195 | xmlattr, space in an attribute name | **fixed** by the backport |
+| CVE-2024-34064 | xmlattr, further characters | **fixed** by the backport |
+| CVE-2024-56326 | sandbox escape via `str.format` — CVSS 7.8 | still affected |
+| CVE-2025-27516 | sandbox escape via `\|attr` | still affected |
+
+The backport touches one function, `do_xmlattr`. So it fixes what that function
+is responsible for and nothing else, and the document says so.
+
+> "Two of these flip. Two stay red, including the highest-scoring one in the
+> set. A blanket all-clear would have been easier to author and would have been
+> a false vendor statement — and that is the failure mode this entire mechanism
+> exists to prevent. Partial remediation, honestly labelled, is what real
+> vendor VEX looks like."
+
+That asymmetry is also a better screen than four greens. The audience watches a
+security document disagree with itself in public and hold up.
+
+#### What not to say
+
+- Do **not** say Red Hat has issued this VEX. You wrote it. Say that, in those
+  words, while it is on screen.
+- Do **not** call it a fix for the scanner finding. It is a statement *about*
+  the finding; the scanner remains correct about the version, which is the
+  point.
+- Do **not** promise a delivery date for the Lightwell security feed. "In
+  progress, and this is the shape of it" is both true and enough.
+
 ### The integrity rule
 
 Never show a `packages.redhat.com` URL while resolving from
