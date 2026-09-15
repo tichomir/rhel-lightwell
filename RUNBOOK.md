@@ -593,21 +593,52 @@ Measured, real numbers from this environment:
 
 | Step | Time |
 |---|---|
-| Rebuild on a **new base OS** and push | 3m20s |
-| Rebuild with a **remediated dependency** and push | 1m22s |
+| Rebuild on a **new base OS** and push | 1m–3m20s |
+| Rebuild with a **remediated dependency** and push | 37s–1m22s |
 | Promote (`skopeo copy`) | under 1s |
-| `bootc upgrade` — OS change, 950 MB | 4m |
-| `bootc upgrade` — **app dependency only, 31.5 MB** | **20s** |
+| `bootc upgrade` — OS change, 950 MB | **2m51s–4m** |
+| `bootc upgrade` — **app dependency only, ~27–31 MB** | **15–20s** |
 | Reboot to healthy app | ~40s |
 | `bootc rollback` | 2.9s |
 | Backported wheel: patch, build, publish | ~30s |
-| Full environment reset between takes | 6s |
+| Full environment reset (`reset-demo.sh`) | 22s |
+| Quick revert between takes (`reset.sh`) | 6s |
+
+Ranges are from two full dry runs on consecutive days. The spread is real and
+worth knowing before you commit to a number on camera:
+
+- **Builds** are fast when `baseos` is already cached and slow when the
+  `rhel-bootc` base has to be pulled fresh (~1.6 GB). The first build of a
+  session is the slow one.
+- **`bootc upgrade` for the OS act** varies with your link to quay — it is a
+  950 MB pull either way. This is the dead-air step; plan for 4 minutes and be
+  pleased with 3.
+- **`bootc upgrade` for the app act** is consistently 15–20s because only the
+  application layers move. That number is safe to quote.
 
 So a genuine patch-to-production is **under ten minutes of wall clock**, and
 the rollback is three seconds. Those are real and you can show them uncut.
 
 Do not splice and then claim a wall-clock number across the cut. Someone will
 ask, and you want to be able to say the take is uncut.
+
+---
+
+## A determinism trap worth knowing
+
+`tests/test_functional.py` books a ticket against the **live** demo database,
+and Act 3's proof is running that suite unchanged. Until this was fixed, every
+run left an `Integration Test` booking behind — so the booking list on the Act 4
+screen grew by one per take and no two takes matched.
+
+A `cleanup_bookings` fixture now removes what the tests create. If you add a
+test that writes to the database, use it, or the same drift comes back.
+
+Verify at any time — this should print exactly one row:
+
+```bash
+ssh im-train 'curl -sS http://localhost:8080/api/bookings | jq -c "[.[].reference]"'
+```
 
 ---
 
