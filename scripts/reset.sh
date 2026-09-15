@@ -54,6 +54,23 @@ echo "== disabling the bootc update timer =="
 ssh -o StrictHostKeyChecking=no "${SSH_USER}@${APP_HOST}" \
     "sudo systemctl disable --now bootc-fetch-apply-updates.timer || true"
 
+# An internal snapshot restores RAM state, so the guest's clock comes back as
+# old as the snapshot - here, a day behind. And chronyd restored ITS state too,
+# so `timedatectl` cheerfully reports "System clock synchronized: yes" and it
+# never corrects: there is no offset from the reference time it remembers.
+# `chronyc makestep` returns 200 OK and moves nothing.
+#
+# This matters because the recording checklist puts `date -Is` on screen at the
+# start and end of every act, and the whole elapsed-time argument rests on
+# those timestamps being real. It also skews journal timestamps.
+#
+# The RTC is backed by the host clock and is correct, so step from that and let
+# chrony re-establish afterwards.
+echo "== correcting the clock (a snapshot revert rewinds it) =="
+ssh -o StrictHostKeyChecking=no "${SSH_USER}@${APP_HOST}" \
+    'sudo hwclock --hctosys --utc && sudo chronyc makestep >/dev/null 2>&1; date -Is' \
+    | sed 's/^/  guest now: /'
+
 echo "== reseeding the database =="
 ssh -o StrictHostKeyChecking=no "${SSH_USER}@${DB_HOST}" \
     "sudo -u postgres psql -d imtrain -f /opt/seed/seed.sql -q"
