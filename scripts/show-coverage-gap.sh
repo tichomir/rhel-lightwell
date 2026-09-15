@@ -7,7 +7,7 @@
 # WHY THIS SCENE EXISTS
 #
 # The hardest thing to land in this demo is that a fully patched, fully
-# compliant RHEL host can still be running an exploitable application - and
+# compliant RHEL host can still be carrying a reachable vulnerability - and
 # that this is not a failure of RHEL, it is the boundary of what a RHEL
 # subscription has ever covered.
 #
@@ -156,4 +156,11 @@ printf '  bootc image     '; bootc status --json 2>/dev/null | jq -r '.status.bo
 printf '  pending updates '; (dnf -q check-update >/dev/null 2>&1 && echo "none") || echo "n/a (image mode: /usr is read-only, dnf is not how this host is patched)"
 echo
 dim "  Nothing above is wrong or out of date. That is the entire point: the host"
-dim "  is correct, and the application is still exploitable."
+dim "  is correct, and the application still carries a reachable vulnerability."
+echo
+dim "  BE PRECISE IF ASKED \"can you pop an alert?\". In THIS app, no - the UI"
+dim "  escapes on output, so the filter's result never reaches an HTML context"
+dim "  unescaped. The library flaw is real and reachable from a request; whether"
+dim "  it becomes XSS depends on the consumer's output path. xmlattr exists to"
+dim "  produce markup for insertion, so an app that uses it as intended is"
+dim "  exposed. Saying that is stronger than overclaiming and being corrected."

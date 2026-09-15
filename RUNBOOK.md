@@ -351,6 +351,22 @@ Then the line that buys you credibility:
 The script refuses to mislead if run on a remediated build — it reports the
 `ValueError` and tells you to revert.
 
+**If someone asks "so pop an alert then" — you cannot, and say why.** Audited:
+`app/static/app.js` escapes every value it writes to the DOM (`escapeHtml` in
+`dl()` and in the booking handler; the receipt uses `textContent`). There is no
+unescaped HTML sink, so the filter's output never reaches an HTML context raw.
+
+The precise claim is narrower than "your application is exploitable", and
+stronger for being accurate:
+
+> "The library hands its caller markup that a parser misreads. `xmlattr` exists
+> to build attributes for insertion into HTML, so a consumer using it as
+> intended is exposed. This app happens to escape on output, so it is not —
+> defence in depth saved us, and that is not a patching strategy."
+
+Do not claim a live XSS in this app. A security person will ask to see it, and
+the honest answer is better than a walked-back one.
+
 ### The scanner
 
 ```bash

@@ -118,6 +118,13 @@ echo
 dim "  There is no working exploit in this repository or in the recording. A"
 dim "  recording gets forwarded and re-shown without you in the room."
 echo
+dim "  And note what this does NOT claim: that this app can be made to pop an"
+dim "  alert. It cannot - the UI escapes on output. What is demonstrated is that"
+dim "  the LIBRARY hands its caller markup a parser misreads. xmlattr exists to"
+dim "  produce attributes for insertion into HTML, so a consumer using it as"
+dim "  intended is exposed; this app is not, because it escapes. Defence in"
+dim "  depth saved it, and relying on that is not a patching strategy."
+echo
 dim "  And CVE-2024-56326 in the same grype report is a SANDBOX ESCAPE at CVSS"
 dim "  7.8 - the genuinely serious one. It is deliberately not what is being"
 dim "  demonstrated. Say that out loud: it is more honest, and it sounds more"
