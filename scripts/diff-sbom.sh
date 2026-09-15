@@ -48,7 +48,8 @@ extract() {
       [.relationships[]? | select(.relationshipType == "DESCRIBES") | .relatedSpdxElement] as $roots
       | .packages[]
       | select(.name != null)
-      | select(($roots | index(.SPDXID // "")) == null)
+      | (.SPDXID // "") as $id
+      | select(($roots | index($id)) == null)
       | "\(.name)\t\(.versionInfo // "-")"' "$1" | sort -u
 }
 
