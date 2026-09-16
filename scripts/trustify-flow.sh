@@ -160,12 +160,19 @@ PY
 case "${1:-load}" in
 reset)
     bold "wiping trustify"
+    # Read the data directory out of the unit rather than hard-coding it: it is
+    # per-version (see serve-trustify.sh - the 0.4.x and 0.5.x migration
+    # histories diverge, so each line needs its own database).
+    UNIT=/etc/containers/systemd/trustify.container
+    DATA=$(sed -n 's/^WorkingDir=//p' "${UNIT}" 2>/dev/null | head -1)
+    DATA="${DATA:-/srv/trustify/data}"
+    echo "  data dir: ${DATA}"
     sudo systemctl stop trustify.service 2>/dev/null || sudo podman rm -f trustify 2>/dev/null
-    sudo rm -rf /srv/trustify/data && sudo mkdir -p /srv/trustify/data
-    sudo chown -R 1000:1000 /srv/trustify/data
+    sudo rm -rf "${DATA}" && sudo mkdir -p "${DATA}"
+    sudo chown -R 1000:1000 "${DATA}"
     sudo systemctl start trustify.service 2>/dev/null || true
     for _ in $(seq 1 90); do
-        curl -fsS -m2 "${API}/api/${V}/sbom" >/dev/null 2>&1 && break
+        curl -fsS -m2 "${API}/openapi.json" >/dev/null 2>&1 && break
         sleep 1
     done
     echo "  empty and ready"
