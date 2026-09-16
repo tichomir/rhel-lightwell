@@ -842,13 +842,21 @@ seconds:
 ssh im-builder 'cd ~/rhel-lightwell && ./scripts/trustify-flow.sh osv'
 ```
 
-Reload Vulnerabilities — **Impacted SBOMs is now 2, 2, 2, 2.**
+Reload Vulnerabilities — **every row moves: 1, 1, 1, 1 → 2, 2, 2, 2.**
 
-> "I have just added osv.dev, the public open-source vulnerability database.
-> It has never heard of this backport, so it still matches the version range
-> and calls both builds affected. That gap — between what the vendor knows and
-> what the public feed knows — is exactly what the Lightwell security feed
-> closes. The VEX still says Fixed; the public feed just doesn't know yet."
+> "I have just added osv.dev — the public open-source vulnerability database,
+> the recall list every scanner looks things up in. It has never heard of this
+> backport, so it still matches the version range and calls both builds
+> affected. All four rows just moved.
+>
+> Nothing about the artifact changed. I fixed all four of these, the tests
+> prove it against upstream's own proof of concept, and the public feed still
+> says I did not — because a version number cannot carry that fact. That gap,
+> between what the vendor knows and what the feed knows, is exactly what the
+> Lightwell security feed closes. And notice the VEX still says Fixed: the
+> mechanism works, it just needs publishing."
+
+That last sentence is the ask, and this is the screen to say it on.
 
 **Why the two states differ, if someone asks:** Red Hat's real VEX describes
 Red Hat product identities — a CPE plus an RPM purl — so it never competes with
