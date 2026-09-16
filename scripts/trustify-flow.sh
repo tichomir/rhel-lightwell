@@ -2,8 +2,10 @@
 # The SBOM + VEX correlation scene, end to end and asserted.
 #
 #   ./scripts/trustify-flow.sh              load everything, then show the verdict
-#   ./scripts/trustify-flow.sh gui          load for the GUI walk-through (no public feed)
-#   ./scripts/trustify-flow.sh osv          add the public feed, so 1 becomes 2
+#   ./scripts/trustify-flow.sh sboms        live step 1: the two SBOMs only
+#   ./scripts/trustify-flow.sh vex          live step 2: the VEX
+#   ./scripts/trustify-flow.sh osv          live step 3: the public feed
+#   ./scripts/trustify-flow.sh gui          all of 1+2 at once, for rehearsal
 #   ./scripts/trustify-flow.sh verdict      just re-print the verdict
 #   ./scripts/trustify-flow.sh reset        wipe trustify and start empty
 #
@@ -161,39 +163,64 @@ verdict)
     verdict "${2:-4}"
     exit $?
     ;;
-gui)
-    # The state the GUI screens need: both SBOMs and the VEX, and NOT the
-    # osv.dev feed. Without this the "Impacted SBOMs" column reads 2/2/2/2 and
-    # the SBOMs list shows 4 on both builds, because the public feed's version
-    # ranges still match the backport and nothing tells trustify that a vendor
-    # statement about the same purl outranks them.
+sboms)
+    # LIVE STEP 1. Just the two SBOMs, nothing else.
     #
-    # This is a legitimate configuration, not a staged one - it is TPA fed by
-    # the vendor's feed for vendor content. But SAY on camera that osv.dev is
-    # not loaded, then load it with `osv` and let the numbers move. The gap is
-    # the ask, and showing it is stronger than hiding it.
-    "$0" reset >/dev/null
-    bold "loading both SBOMs and the VEX (no public feed yet)"
+    # With no advisory data loaded, BOTH builds report 0 vulnerabilities. That
+    # is not a bug and it is worth saying out loud: an SBOM is an inventory,
+    # not a risk assessment. It only means something against a list of known
+    # vulnerabilities, which is what the next two steps supply.
+    bold "uploading the two SBOMs"
     up /api/v2/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable"
     up /api/v2/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated"
+    dim "  Refresh SBOMs: two rows, 3664 dependencies each, 0 vulnerabilities"
+    dim "  on BOTH - because trustify has no advisory data yet."
+    exit 0
+    ;;
+vex)
+    # LIVE STEP 2. The vendor statement, and the moment the two builds stop
+    # looking identical.
     if [[ ! -r "${VEX}" ]]; then
         sudo cp /srv/vex/RHLAB-VEX-2026-0001.json /tmp/vex.json && sudo chmod 644 /tmp/vex.json
         VEX=/tmp/vex.json
     fi
+    bold "uploading the lab VEX"
     up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")"
+    dim "  Refresh SBOMs: 1.1 now reads 4 vulnerabilities, 1.2 reads 0."
+    dim "  One document did that. Say that you wrote it."
+    exit 0
+    ;;
+gui)
+    # Everything at once - for rehearsal, or if the live sequence goes wrong
+    # mid-take and you need the end state back in fifteen seconds.
+    #
+    # Deliberately does NOT load osv.dev. With the public feed present the
+    # SBOMs list reads 4 on both builds and "Impacted SBOMs" reads 2/2/2/2,
+    # because osv's version ranges still match the backport and nothing tells
+    # trustify that a vendor statement about the same purl outranks them.
+    #
+    # That is a legitimate configuration, not a staged one - it is TPA fed by
+    # the vendor's feed for vendor content. But SAY on camera that osv.dev is
+    # not loaded, then load it with `osv` and let the numbers move. The gap is
+    # the ask, and showing it is stronger than hiding it.
+    "$0" reset >/dev/null
+    "$0" sboms >/dev/null
+    "$0" vex   >/dev/null
     cat <<'GUI'
 
-Ready for the GUI walk-through. Three clicks, in this order:
+Loaded: both SBOMs + the VEX, no public feed.
 
-  1. SBOMs          two rows, 1.1 and 1.2, 3664 components each
-  2. Vulnerabilities   "Impacted SBOMs" reads  1, 1, 1, 1  - all four, one build
+Three clicks, in this order:
+
+  1. SBOMs             1.1 -> 4 vulnerabilities, 1.2 -> 0   <- the best screen
+  2. Vulnerabilities   "Impacted SBOMs" reads  1, 1, 1, 1
   3. CVE-2024-56326 -> Related SBOMs   1.1 Affected, 1.2 Fixed  (the 7.8)
 
 Then, to show the gap honestly:
-  ./scripts/trustify-flow.sh osv     <- adds the public feed; 1 becomes 2
+  ./scripts/trustify-flow.sh osv     <- adds the public feed; 1.2 goes back to 4
 
 Do not type URLs - the UI drops the route on a hard load. Click through the
-menu. And open on Vulnerabilities, not the Dashboard.
+menu, and open on Vulnerabilities rather than the Dashboard.
 GUI
     exit 0
     ;;
@@ -205,8 +232,9 @@ osv)
         [[ -r "$f" ]] || continue
         up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
     done
-    dim "  Reload the Vulnerabilities page: Impacted SBOMs is now 2,2,2,2."
-    dim "  CVE-2024-56326 -> Related SBOMs still shows the Fixed row for 1.2."
+    dim "  Refresh SBOMs: 1.2 goes from 0 back to 4. Impacted SBOMs is 2,2,2,2."
+    dim "  CVE-2024-56326 -> Related SBOMs STILL shows the Fixed row for 1.2 -"
+    dim "  the VEX did not stop being true, the public feed just cannot see it."
     exit 0
     ;;
 esac
