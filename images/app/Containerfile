@@ -11,8 +11,13 @@
 # Installing dependencies at runtime would be easier and would destroy the
 # entire argument of this demo. Don't.
 
+# Both ARGs are consumed by the FROM below, so they are declared before it -
+# that is the one place Containerfile scoping requires it. NS exists so this
+# file names no registry of its own: build-and-push.sh passes the namespace it
+# is pushing to, and the default merely documents the shape.
+ARG NS=quay.io/rhte2023
 ARG BASE_TAG=10.1
-FROM quay.io/CHANGEME/baseos:${BASE_TAG}
+FROM ${NS}/baseos:${BASE_TAG}
 
 RUN python3 -m venv /opt/app/venv \
     && /opt/app/venv/bin/pip install --no-cache-dir --upgrade pip

@@ -71,30 +71,24 @@ echo "== baseos:${BASE_TAG} (FROM rhel-bootc:${BASE_TAG}) =="
 podman build --build-arg "BASE_TAG=${BASE_TAG}" \
     -t "${NS}/baseos:${BASE_TAG}" images/baseos
 
-# The app and db Containerfiles reference quay.io/CHANGEME/baseos. Substitute at
-# build time so the committed files carry no personal namespace.
-TMP="$(mktemp -d)"
-trap 'rm -rf "${TMP}"' EXIT
-sed "s|quay.io/CHANGEME|${NS}|" images/app/Containerfile > "${TMP}/app.Containerfile"
-sed "s|quay.io/CHANGEME|${NS}|" images/db/Containerfile  > "${TMP}/db.Containerfile"
-
 echo "== im-train:${VER} =="
 # pip.conf and netrc go in as build SECRETS, not COPY. A copied file lives in
 # its own layer forever and a later rm only hides it - and these images are
 # pushed to public repositories. See the comment in images/app/Containerfile.
 podman build \
+    --build-arg "NS=${NS}" \
     --build-arg "BASE_TAG=${BASE_TAG}" \
     --build-arg "APP_VERSION=${VER}" \
     --build-arg "DEP_STATE=${DEP_STATE}" \
     --secret "id=pipconf,src=images/app/pip.conf" \
     --secret "id=netrc,src=images/app/netrc" \
     -t "${NS}/im-train:${VER}" \
-    -f "${TMP}/app.Containerfile" .
+    -f images/app/Containerfile .
 
 if [[ "${BUILD_DB}" == "yes" ]]; then
     echo "== im-train-db:pg16 =="
-    podman build --build-arg "BASE_TAG=${BASE_TAG}" \
-        -t "${NS}/im-train-db:pg16" -f "${TMP}/db.Containerfile" .
+    podman build --build-arg "NS=${NS}" --build-arg "BASE_TAG=${BASE_TAG}" \
+        -t "${NS}/im-train-db:pg16" -f images/db/Containerfile .
 fi
 
 if [[ "${PUSH}" != "yes" ]]; then
