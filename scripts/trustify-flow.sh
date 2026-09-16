@@ -2,6 +2,8 @@
 # The SBOM + VEX correlation scene, end to end and asserted.
 #
 #   ./scripts/trustify-flow.sh              load everything, then show the verdict
+#   ./scripts/trustify-flow.sh gui          load for the GUI walk-through (no public feed)
+#   ./scripts/trustify-flow.sh osv          add the public feed, so 1 becomes 2
 #   ./scripts/trustify-flow.sh verdict      just re-print the verdict
 #   ./scripts/trustify-flow.sh reset        wipe trustify and start empty
 #
@@ -157,6 +159,54 @@ reset)
 verdict)
     verdict "${2:-2}"
     exit $?
+    ;;
+gui)
+    # The state the GUI screens need: both SBOMs and the VEX, and NOT the
+    # osv.dev feed. Without this the "Impacted SBOMs" column reads 2/2/2/2 and
+    # the SBOMs list shows 4 on both builds, because the public feed's version
+    # ranges still match the backport and nothing tells trustify that a vendor
+    # statement about the same purl outranks them.
+    #
+    # This is a legitimate configuration, not a staged one - it is TPA fed by
+    # the vendor's feed for vendor content. But SAY on camera that osv.dev is
+    # not loaded, then load it with `osv` and let the numbers move. The gap is
+    # the ask, and showing it is stronger than hiding it.
+    "$0" reset >/dev/null
+    bold "loading both SBOMs and the VEX (no public feed yet)"
+    up /api/v2/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable"
+    up /api/v2/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated"
+    if [[ ! -r "${VEX}" ]]; then
+        sudo cp /srv/vex/RHLAB-VEX-2026-0001.json /tmp/vex.json && sudo chmod 644 /tmp/vex.json
+        VEX=/tmp/vex.json
+    fi
+    up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")"
+    cat <<'GUI'
+
+Ready for the GUI walk-through. Three clicks, in this order:
+
+  1. SBOMs          two rows, 1.1 and 1.2, 3664 components each
+  2. Vulnerabilities   "Impacted SBOMs" reads  1, 1, 2, 2
+  3. CVE-2024-22195 -> Related SBOMs   1.1 Affected, 1.2 Fixed
+
+Then, to show the gap honestly:
+  ./scripts/trustify-flow.sh osv     <- adds the public feed; 1 becomes 2
+
+Do not type URLs - the UI drops the route on a hard load. Click through the
+menu. And open on Vulnerabilities, not the Dashboard.
+GUI
+    exit 0
+    ;;
+osv)
+    # Add the public feed on top of whatever is loaded, so the two xmlattr
+    # CVEs go from "1 impacted SBOM" to 2 while the VEX still says fixed.
+    bold "adding the public osv.dev feed"
+    for f in "${OSV}"/GHSA-*.json "${OSV}"/PYSEC-*.json; do
+        [[ -r "$f" ]] || continue
+        up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
+    done
+    dim "  Reload the Vulnerabilities page: Impacted SBOMs is now 2,2,2,2."
+    dim "  CVE-2024-22195 -> Related SBOMs still shows the Fixed row for 1.2."
+    exit 0
     ;;
 esac
 
