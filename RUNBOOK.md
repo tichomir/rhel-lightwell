@@ -620,17 +620,24 @@ extra-index-url = https://pypi.org/simple/
 trusted-host    = lightwell.homelab.com
 ```
 
-**Worth putting on screen, because this file is the mechanism.** Two lines of
-configuration are the entire difference between a vulnerable build and a
-remediated one:
+**Do not show `pip.conf` as proof of anything.** It is the state *now*, not at
+build time, and it is a build secret that never enters the image. The proof
+that 1.2 carries the Lightwell wheel is inside the image itself:
 
 ```bash
-ssh im-builder 'cat ~/rhel-lightwell/images/app/pip.conf'
+ssh im-builder 'sudo podman run --rm --entrypoint="" quay.io/rhte2023/im-train:1.2 /opt/app/venv/bin/pip show jinja2'
 ```
 
-> "That is it. One index URL. The application source did not change, the
-> version I asked for did not have to change, and the build I am about to run
-> is the same command I ran in Act 1."
+```
+Version: 2.11.3+rhlw00001
+```
+
+```bash
+ssh im-builder 'sudo podman run --rm --network host registry.access.redhat.com/ubi9/python-312 pip index versions jinja2 --index-url https://pypi.org/simple/ | grep rhlw'
+```
+
+Nothing. PyPI has no `rhlw` version. The image contains one, so it can only
+have come from the Lightwell index.
 
 **Confirm both halves agree before you build.** A mismatch is the single most
 likely way this act fails on camera — and `build-and-push.sh` only guards the
