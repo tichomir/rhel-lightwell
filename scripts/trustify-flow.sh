@@ -66,10 +66,10 @@ up() { # path file content-type label
     [[ "${code}" == 2* ]]
 }
 
-verdict() {
-    python3 - "${API}" ${CVES} <<'PY'
+verdict() { # expected number of `fixed` assertions (0 before the VEX, 2 after)
+    python3 - "${API}" "${1:-2}" ${CVES} <<'PY'
 import json, sys, urllib.request, collections
-api, cves = sys.argv[1], sys.argv[2:]
+api, want_fixed, cves = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
 
 def get(p):
     with urllib.request.urlopen(api + p, timeout=120) as r:
@@ -121,14 +121,22 @@ def check(label, got, want):
     ok = ok and good
     print(f"   {'ok  ' if good else 'FAIL'}  {label:46} {got}" + ("" if good else f"  want {want}"))
 
-check("CVEs the VEX marks fixed on the backport", fixed_total, 2)
+check("CVEs the VEX marks fixed on the backport", fixed_total, want_fixed)
 print()
 if not ok:
-    print(f"{RED}  If nothing is fixed, the VEX product_tree is probably the flat")
-    print(f"  full_product_names form, which correlates with nothing.{OFF}")
+    if want_fixed:
+        print(f"{RED}  Expected the VEX to mark two CVEs fixed and it marked {fixed_total}.")
+        print(f"  The most likely cause by far: the VEX product_tree is the flat")
+        print(f"  full_product_names form, which is valid CSAF and correlates with")
+        print(f"  nothing at all. See the header of make-vex.sh.{OFF}")
     sys.exit(1)
-print(f"{GRN}  Two fixed, two still affected. The backport covers what it covers,")
-print(f"  and a machine agrees - from a document, not from narration.{OFF}")
+if want_fixed == 0:
+    print(f"{DIM}  Nothing is fixed yet, which is the point of this screen: the public")
+    print(f"  feed alone cannot tell these two builds apart. A third tool - after")
+    print(f"  grype and after TPA - calls the backport vulnerable to all four.{OFF}")
+else:
+    print(f"{GRN}  Two fixed, two still affected. The backport covers what it covers,")
+    print(f"  and a machine agrees - from a document, not from narration.{OFF}")
 PY
 }
 
@@ -147,7 +155,7 @@ reset)
     exit 0
     ;;
 verdict)
-    verdict
+    verdict "${2:-2}"
     exit $?
     ;;
 esac
@@ -165,7 +173,7 @@ up /api/v2/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediat
 bold "2. the public advisories"
 dim "  Fetched from osv.dev - GHSA and PYSEC records for PyPI jinja2. This is"
 dim "  the feed a real deployment gets from an importer on a schedule."
-if [[ ! -d "${OSV}" ]] || ! compgen -G "${OSV}/*.json" >/dev/null; then
+if [[ ! -d "${OSV}" ]] || ! compgen -G "${OSV}/GHSA-*.json" >/dev/null; then
     mkdir -p "${OSV}"
     curl -sS -X POST https://api.osv.dev/v1/query -H 'Content-Type: application/json' \
          -d '{"package":{"name":"jinja2","ecosystem":"PyPI"}}' -o "${OSV}/query.json"
@@ -179,13 +187,13 @@ for v in json.load(open(f"{out}/query.json")).get("vulns", []):
 PY
     rm -f "${OSV}/query.json"
 fi
-for f in "${OSV}"/*.json; do
+for f in "${OSV}"/GHSA-*.json "${OSV}"/PYSEC-*.json; do
     [[ -r "$f" ]] || continue
     up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
 done
 
 bold "3. before the VEX - ask trustify about both builds"
-verdict || true
+verdict 0 || true
 
 bold "4. the lab VEX"
 dim "  ONE document, authored in this lab. Not a Red Hat statement."
@@ -197,7 +205,7 @@ fi
 up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")" || exit 1
 
 bold "5. after the VEX - ask again"
-verdict
+verdict 2
 rc=$?
 
 cat <<NEXT
