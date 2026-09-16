@@ -263,8 +263,17 @@ the whole premise.
 ### The coverage gap, on one screen
 
 ```bash
-ssh im-train 'sudo bash -s' < scripts/show-coverage-gap.sh
+ssh im-builder 'cd ~/rhel-lightwell && ssh -o StrictHostKeyChecking=no rhel-admin@im-train.homelab.com "sudo bash -s" < scripts/show-coverage-gap.sh'
 ```
+
+**Note the shape of this one.** It pipes a script from the repository into the
+guest, so unlike every other command in this runbook it depends on where you
+are standing. Run it from the builder, which has the clone — that form works
+from anywhere. If you are sitting in a local clone on your laptop, the shorter
+`ssh im-train 'sudo bash -s' < scripts/show-coverage-gap.sh` does the same
+thing; outside one it fails with `No such file or directory`, which looks like
+the script is broken and is really just a missing working directory.
+
 
 This is the strongest thirty seconds available to you, and it was a lucky
 accident of packaging. The host carries jinja2 **twice**:
@@ -333,8 +342,12 @@ exists. Check inside a repo-enabled RHEL 10 container.
 ### What "exploitable" actually means
 
 ```bash
-ssh im-train 'sudo bash -s' < scripts/show-injection.sh
+ssh im-builder 'cd ~/rhel-lightwell && ssh -o StrictHostKeyChecking=no rhel-admin@im-train.homelab.com "sudo bash -s" < scripts/show-injection.sh'
 ```
+
+Same shape as the coverage-gap command above — it reads the script from the
+clone on the builder, so it does not care where you are.
+
 
 The coverage-gap scene proves the unsafe attribute *name* survives. On its own
 that is abstract. This closes the gap by putting an HTML parser on the same
