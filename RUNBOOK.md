@@ -749,6 +749,39 @@ This is the scene that turns Act 3's last claim from a promise into a
 demonstration. Up to this point every assertion has been shown; "a VEX
 statement is where this is heading" was the one thing only said.
 
+**Version matters here.** We run **Trustify 0.5.0**, not GitHub's
+"latest release". That pointer says 0.4.20 because it is the most recently
+*dated* — but `0.4.x` is a maintenance branch. Verified against the tagged
+API specs:
+
+| | paths | SBOM Groups | API |
+|---|---|---|---|
+| 0.4.20 | 49 | **no** | v2 only |
+| **0.5.0** | 58 | **yes** | v2 + v3 |
+| 0.6.0-rc.3 | 61 | yes | v2 + v3 — *prerelease* |
+
+0.5.0 is what makes this instance look like TPA: **SBOM Groups** in the nav, a
+**Models** tab, a light/dark **theme selector**, and a **CVSS score breakdown**
+popover — click the "*N* Sources" control beside any CVE and you get a
+per-source score table. With the public feed loaded that reads **3 Sources**,
+which is the provenance view you see in TPA.
+
+Two traps that come with it, both handled in the scripts:
+
+- **0.5.0 moved uploads to `/api/v3/…`** and left only GETs on v2, so a v2
+  POST returns a bare `404`. `trustify-flow.sh` reads `/openapi.json` and picks
+  the prefix; `V=v2` or `V=v3` pins it.
+- **The migration histories diverge.** 0.4.20's database carries migrations
+  that do not exist in 0.5.0, so pointing 0.5.0 at it fails with *"migration
+  has been applied but its file is missing"* — which reads like corruption and
+  is a branch mismatch. The data directory is therefore per-version.
+
+**Where the VEX status actually shows.** Not on the SBOM's Vulnerabilities tab
+— that one has Id / Description / CVSS / Affected dependencies. It is on
+**Vulnerabilities → CVE → Related SBOMs**, as the **Status** column
+(`Affected` / `Fixed`). That column exists in both versions; it is just on a
+different screen than people expect.
+
 **Stand it up once, before recording:**
 
 ```bash
