@@ -17,6 +17,19 @@ BUILD_DB="${BUILD_DB:-yes}"
 # reads from local podman storage with --local, so the hosts only need the
 # registry once they start doing `bootc upgrade`.
 PUSH="${PUSH:-yes}"
+# NOCACHE=yes forces pip install to actually run.
+#
+# Podman's cache key for the `RUN ... pip install` layer is the instruction text
+# plus the layers before it - it does NOT include the mounted pip.conf secret.
+# So a rebuild whose requirements.txt matches an earlier build reuses that layer
+# and pip never runs: nothing is downloaded and the index configuration is
+# irrelevant. The image is still correct, but the build demonstrates nothing.
+#
+# Use NOCACHE=yes for the Act 3 rebuild, where the whole point is watching the
+# wheel come from the Lightwell index.
+NOCACHE="${NOCACHE:-no}"
+CACHE_ARGS=()
+[[ "${NOCACHE}" == "yes" ]] && CACHE_ARGS=(--no-cache)
 
 cd "$(dirname "$0")/.."
 
@@ -68,14 +81,14 @@ fi
 echo "== dependency state: ${DEP_STATE} (${DEP_LINE}) =="
 
 echo "== baseos:${BASE_TAG} (FROM rhel-bootc:${BASE_TAG}) =="
-podman build --build-arg "BASE_TAG=${BASE_TAG}" \
+podman build "${CACHE_ARGS[@]}" --build-arg "BASE_TAG=${BASE_TAG}" \
     -t "${NS}/baseos:${BASE_TAG}" images/baseos
 
 echo "== im-train:${VER} =="
 # pip.conf and netrc go in as build SECRETS, not COPY. A copied file lives in
 # its own layer forever and a later rm only hides it - and these images are
 # pushed to public repositories. See the comment in images/app/Containerfile.
-podman build \
+podman build "${CACHE_ARGS[@]}" \
     --build-arg "NS=${NS}" \
     --build-arg "BASE_TAG=${BASE_TAG}" \
     --build-arg "APP_VERSION=${VER}" \
@@ -87,7 +100,7 @@ podman build \
 
 if [[ "${BUILD_DB}" == "yes" ]]; then
     echo "== im-train-db:pg16 =="
-    podman build --build-arg "NS=${NS}" --build-arg "BASE_TAG=${BASE_TAG}" \
+    podman build "${CACHE_ARGS[@]}" --build-arg "NS=${NS}" --build-arg "BASE_TAG=${BASE_TAG}" \
         -t "${NS}/im-train-db:pg16" -f images/db/Containerfile .
 fi
 
