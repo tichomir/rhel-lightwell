@@ -599,6 +599,53 @@ ssh im-builder 'sudo podman run --rm --network host registry.access.redhat.com/u
 
 Output is one line: `Available versions: 2.11.3+rhlw00001`. Clean screen.
 
+### Point the build at the Lightwell index — the step that actually does it
+
+**This step was missing from this runbook until now, and without it Act 3
+fails.** The rebuild below would ask *pypi.org* for `2.11.3+rhlw00001`, which
+does not exist there, and the build dies inside `pip install`.
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && ./scripts/switch-track.sh b'
+```
+
+That rewrites **`images/app/pip.conf`**, which `build-and-push.sh` passes into
+the build as a secret and the Containerfile mounts at `/etc/pip.conf` for
+exactly one layer:
+
+```ini
+[global]
+index-url       = https://lightwell.homelab.com/simple/
+extra-index-url = https://pypi.org/simple/
+trusted-host    = lightwell.homelab.com
+```
+
+**Worth putting on screen, because this file is the mechanism.** Two lines of
+configuration are the entire difference between a vulnerable build and a
+remediated one:
+
+```bash
+ssh im-builder 'cat ~/rhel-lightwell/images/app/pip.conf'
+```
+
+> "That is it. One index URL. The application source did not change, the
+> version I asked for did not have to change, and the build I am about to run
+> is the same command I ran in Act 1."
+
+**Confirm both halves agree before you build.** A mismatch is the single most
+likely way this act fails on camera — and `build-and-push.sh` only guards the
+opposite direction (a vulnerable pin against a Lightwell index):
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && echo "pin:   $(grep ^jinja2 requirements.txt)" && echo "index: $(grep index-url images/app/pip.conf | head -1)"'
+```
+
+Both must say Lightwell, or both PyPI. Never one of each.
+
+`switch-track.sh vulnerable` puts it all back, and `reset-demo.sh` calls that
+for you — which is why Acts 0-2 are always on PyPI without you thinking about
+it.
+
 ### The one-line change
 
 ```bash
