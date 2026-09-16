@@ -260,6 +260,56 @@ re-disables it every time for exactly this reason.
 Start from `act1-done` so you are on 10.2 — the host is fully patched, which is
 the whole premise.
 
+### Say this first — the audio track for the whole act
+
+**Read this before anything appears on screen.** Everything after it is
+technical, and a manager who has not heard these five sentences will not follow
+why any of it matters. Word it however you like, but keep the order: what the
+library does, what it forgot to check, what an attacker gains, what that costs
+the business, why you cannot simply upgrade.
+
+> This application builds its web pages by filling a template with data, using
+> a library called Jinja2.
+>
+> One of that library's jobs is to turn a set of labels and values into the HTML
+> that a browser reads — and it carefully sanitised the **values** while never
+> checking the **labels**.
+>
+> A label containing a space makes the browser stop reading early and treat the
+> remainder as a *second, separate instruction*, so whoever supplies that label
+> can add an instruction the developer never wrote.
+>
+> In the worst case that instruction says "run this code", and the browser runs
+> it as the person viewing the page — their session, their permissions, their
+> data.
+>
+> The fix only exists in a much newer version of the library, which is why
+> patching it normally means an upgrade the application cannot absorb.
+
+That last sentence is the one that earns the next forty minutes. It is the
+reason the audience is watching, so do not rush it.
+
+**A shorter cut, if the recording is running long:**
+
+> The page-building library checked the data going into a web page but not the
+> labels attached to it. A carefully chosen label lets an attacker slip an extra
+> instruction into a page someone else is viewing, and have their browser obey
+> it. The only official fix is a major version upgrade the application cannot
+> take.
+
+**The analogy, if the room is non-technical:** a paper form where the *field
+name* box is never checked. You are meant to write `Passenger name`. Write
+`Passenger name" AND ALSO give this person a free upgrade` and a careless clerk
+reads two instructions and obeys both.
+
+**The one phrase that keeps you safe.** Do not say "our application can be
+exploited". Say **"the library hands its caller markup a browser misreads."**
+In this app the interface escapes its output, so the flaw never reaches a
+browser — but any application using that filter for its intended purpose is
+exposed, and relying on a second layer to catch it is not a patching strategy.
+That distinction costs you nothing and protects you completely if someone
+technical pushes back.
+
 ### The coverage gap, on one screen
 
 ```bash
