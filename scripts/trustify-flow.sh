@@ -52,6 +52,18 @@
 set -uo pipefail
 
 API="${API:-http://localhost:8080}"
+
+# The API version moved. 0.4.x serves uploads at /api/v2/...; 0.5.0 moved them
+# to /api/v3/... and left only GETs on v2, so a hard-coded v2 POST returns 404
+# with no hint as to why. Ask the server which it speaks rather than guessing.
+#
+# Override with V=v2 or V=v3 if you need to pin it.
+detect_api() {
+    local spec
+    spec=$(curl -fsS -m10 "${API}/openapi.json" 2>/dev/null) || { echo v2; return; }
+    if grep -q '"/api/v3/sbom"' <<<"${spec}"; then echo v3; else echo v2; fi
+}
+V="${V:-$(detect_api)}"
 SBOMS="${SBOMS:-/srv/sboms}"
 VEX="${VEX:-/srv/vex/RHLAB-VEX-2026-0001.json}"
 OSV="${OSV:-/tmp/osv}"
@@ -81,7 +93,7 @@ def get(p):
 
 # Which purl is which build, straight from what trustify stored.
 purls = {p["purl"]: p["uuid"]
-         for p in get("/api/v2/purl?q=jinja2&limit=200").get("items", [])}
+         for p in get(f"/api/{V}/purl?q=jinja2&limit=200").get("items", [])}
 builds = [("vulnerable  2.11.3",          "pkg:pypi/jinja2@2.11.3"),
           ("remediated  2.11.3+rhlw00001", "pkg:pypi/jinja2@2.11.3+rhlw00001")]
 
@@ -98,7 +110,7 @@ for label, purl in builds:
         continue
     # cve -> source -> status
     seen = collections.defaultdict(dict)
-    for adv in get(f"/api/v2/purl/{uu}").get("advisories", []):
+    for adv in get(f"/api/{V}/purl/{uu}").get("advisories", []):
         typ = (adv.get("labels") or {}).get("type", "?")
         for s in adv.get("status", []):
             cve = s.get("vulnerability", {}).get("identifier")
@@ -153,7 +165,7 @@ reset)
     sudo chown -R 1000:1000 /srv/trustify/data
     sudo systemctl start trustify.service 2>/dev/null || true
     for _ in $(seq 1 90); do
-        curl -fsS -m2 "${API}/api/v2/sbom" >/dev/null 2>&1 && break
+        curl -fsS -m2 "${API}/api/${V}/sbom" >/dev/null 2>&1 && break
         sleep 1
     done
     echo "  empty and ready"
@@ -171,8 +183,8 @@ sboms)
     # not a risk assessment. It only means something against a list of known
     # vulnerabilities, which is what the next two steps supply.
     bold "uploading the two SBOMs"
-    up /api/v2/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable"
-    up /api/v2/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated"
+    up /api/${V}/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable"
+    up /api/${V}/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated"
     dim "  Refresh SBOMs: two rows, 3664 dependencies each, 0 vulnerabilities"
     dim "  on BOTH - because trustify has no advisory data yet."
     exit 0
@@ -185,7 +197,7 @@ vex)
         VEX=/tmp/vex.json
     fi
     bold "uploading the lab VEX"
-    up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")"
+    up /api/${V}/advisory "${VEX}" application/json "$(basename "${VEX}")"
     dim "  Refresh SBOMs: 1.1 now reads 4 vulnerabilities, 1.2 reads 0."
     dim "  One document did that. Say that you wrote it."
     exit 0
@@ -230,7 +242,7 @@ osv)
     bold "adding the public osv.dev feed"
     for f in "${OSV}"/GHSA-*.json "${OSV}"/PYSEC-*.json; do
         [[ -r "$f" ]] || continue
-        up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
+        up /api/${V}/advisory "$f" application/json "$(basename "$f" .json)" || true
     done
     dim "  Refresh SBOMs: 1.2 goes from 0 back to 4. Impacted SBOMs is 2,2,2,2."
     dim "  CVE-2024-56326 -> Related SBOMs STILL shows the Fixed row for 1.2 -"
@@ -239,15 +251,15 @@ osv)
     ;;
 esac
 
-curl -fsS -m5 "${API}/api/v2/sbom" >/dev/null 2>&1 || {
+curl -fsS -m5 "${API}/api/${V}/sbom" >/dev/null 2>&1 || {
     echo "Trustify is not answering on ${API}. Run: sudo ./scripts/serve-trustify.sh" >&2
     exit 1
 }
 
 bold "1. the two SBOMs"
 dim "  Same image, one component apart. 3664 components each."
-up /api/v2/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable" || exit 1
-up /api/v2/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated" || exit 1
+up /api/${V}/sbom "${VULN_SBOM}"  application/octet-stream "im-train 1.1  vulnerable" || exit 1
+up /api/${V}/sbom "${FIXED_SBOM}" application/octet-stream "im-train 1.2  remediated" || exit 1
 
 bold "2. the public advisories"
 dim "  Fetched from osv.dev - GHSA and PYSEC records for PyPI jinja2. This is"
@@ -268,7 +280,7 @@ PY
 fi
 for f in "${OSV}"/GHSA-*.json "${OSV}"/PYSEC-*.json; do
     [[ -r "$f" ]] || continue
-    up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
+    up /api/${V}/advisory "$f" application/json "$(basename "$f" .json)" || true
 done
 
 bold "3. before the VEX - ask trustify about both builds"
@@ -281,7 +293,7 @@ if [[ ! -r "${VEX}" ]]; then
     sudo cp /srv/vex/RHLAB-VEX-2026-0001.json /tmp/vex.json && sudo chmod 644 /tmp/vex.json
     VEX=/tmp/vex.json
 fi
-up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")" || exit 1
+up /api/${V}/advisory "${VEX}" application/json "$(basename "${VEX}")" || exit 1
 
 bold "5. after the VEX - ask again"
 verdict 4

@@ -3,7 +3,7 @@
 # so the SBOMs and the VEX can be correlated on camera rather than described.
 #
 #   sudo ./scripts/serve-trustify.sh
-#   sudo VERSION=0.4.20 ./scripts/serve-trustify.sh
+#   sudo VERSION=0.4.20 ./scripts/serve-trustify.sh    # the older line
 #
 # Then http://<this-host>:8080 and ./scripts/trustify-flow.sh
 #
@@ -57,7 +57,23 @@ set -euo pipefail
 
 [[ "${EUID}" -eq 0 ]] || { echo "Run this with sudo - it writes Quadlet units." >&2; exit 1; }
 
-VERSION="${VERSION:-0.4.20}"
+# 0.5.0, not 0.4.20. GitHub's "latest release" is 0.4.20 because it is the most
+# recently DATED - but 0.4.x is a maintenance branch. 0.5.0 (2026-07-16, not a
+# prerelease) is the newer feature line, and it is what makes this instance look
+# like Trusted Profile Analyzer:
+#
+#   SBOM Groups in the nav        0.5.0 adds /api/v3/group/* and the UI for it
+#   a Models tab                  new
+#   a light/dark theme selector   new
+#   CVSS score breakdown popover  "N Sources" per CVE, with a per-source table
+#
+# 0.6.0-rc.3 exists and adds more, but it is flagged prerelease - not what to
+# put under a recording.
+#
+# NOTE 0.5.0 moved uploads to /api/v3/... and left only GETs on v2, so a v2
+# POST returns a bare 404. trustify-flow.sh detects the version from
+# /openapi.json rather than assuming.
+VERSION="${VERSION:-0.5.0}"
 ROOT="${ROOT:-/srv/trustify}"
 IMAGE="${IMAGE:-registry.access.redhat.com/ubi10/ubi:latest}"
 PORT="${PORT:-8080}"
@@ -139,7 +155,9 @@ systemctl daemon-reload
 systemctl restart trustify.service
 
 for i in $(seq 1 90); do
-    if curl -fsS -m2 "http://localhost:${PORT}/api/v2/sbom" >/dev/null 2>&1; then
+    # /openapi.json rather than an /api/vN path - it is stable across both
+    # release lines, and the v2/v3 split would otherwise make this probe wrong.
+    if curl -fsS -m2 "http://localhost:${PORT}/openapi.json" >/dev/null 2>&1; then
         echo "   ready after ${i}s"
         break
     fi
@@ -158,7 +176,9 @@ Trustify ${VERSION} is up.
 Load the demo content:
   ./scripts/trustify-flow.sh
 
-Note this build serves /api/v2/... . The upstream main branch has moved to
-/api/v3/..., so a spec read from GitHub will not match this server. Ask the
-server itself: curl http://localhost:${PORT}/openapi.json
+Ask the server which API version it speaks rather than assuming - 0.4.x is v2,
+0.5.0 is v3 for uploads:
+  curl -s http://localhost:${PORT}/openapi.json | grep -o '"/api/v[0-9]/sbom"'
+
+To go back to the older line: sudo VERSION=0.4.20 ./scripts/serve-trustify.sh
 NEXT
