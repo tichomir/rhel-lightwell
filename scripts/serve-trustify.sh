@@ -1,0 +1,164 @@
+#!/usr/bin/bash
+# Stand up a local Trustify - the upstream of Red Hat Trusted Profile Analyzer -
+# so the SBOMs and the VEX can be correlated on camera rather than described.
+#
+#   sudo ./scripts/serve-trustify.sh
+#   sudo VERSION=0.4.20 ./scripts/serve-trustify.sh
+#
+# Then http://<this-host>:8080 and ./scripts/trustify-flow.sh
+#
+# ############################################################################
+# WHY THIS RUNS IN A CONTAINER ON A RHEL 9 HOST
+#
+# The release binary is built against a newer glibc than RHEL 9 ships:
+#
+#   trustd-pm needs   GLIBC_2.38, GLIBC_2.39
+#   RHEL 9.8 has      GLIBC 2.34
+#
+# So it will not execute natively here - it exits immediately with "version
+# `GLIBC_2.38' not found". UBI 10 carries glibc 2.39, so the binary runs in a
+# ubi10 container with the host network. That is not a workaround so much as a
+# convenience: it also happens to be RHEL 10.2, the same OS the demo guests
+# run, which is a pleasant thing to be able to say out loud.
+#
+# It must be ubi10 and NOT ubi10-minimal. Minimal has no tzdata, and the
+# embedded PostgreSQL then refuses to start:
+#
+#   Error: invalid value for parameter "TimeZone": "UTC"
+#
+# ############################################################################
+# WHY `trustd-pm` AND NOT `trustd-pm api`
+#
+# The bare command is "PM mode": it installs and manages its own embedded
+# PostgreSQL under .trustify/ and needs no database at all. Passing the `api`
+# subcommand skips that and tries to reach an external Postgres on
+# localhost:5432, which fails with a connection pool timeout that looks like a
+# database problem and is really a wrong-subcommand problem.
+#
+# ############################################################################
+# WHY AUTH IS DISABLED, AND WHY THE ALTERNATIVE IS WORSE
+#
+# AUTH_DISABLED=true. That is a lab posture and must be captioned as one, with
+# the same discipline as the Track B index.
+#
+# The tempting alternative is the built-in mock OIDC server, which PM mode
+# starts automatically - drop AUTH_DISABLED and auth is enforced. Do not. Its
+# listener is hardcoded to [::1]:8090: IPv6 loopback on this host only, and
+# HTTP_SERVER_BIND_ADDR does not affect it. So a browser anywhere else cannot
+# reach the issuer and login simply cannot complete, while every API call now
+# needs a bearer token. Verified on 0.4.20; there is no flag to move it.
+#
+# The only thing auth would have bought is removing one cosmetic error on the
+# dashboard - /api/v2/userPreference/watched-sboms returns 401 with no user
+# identity, so the "watched SBOMs" widget renders a red "Unable to connect".
+# Everything else on that page works. The stagecraft fix is free: open on the
+# Vulnerabilities page, not the dashboard.
+set -euo pipefail
+
+[[ "${EUID}" -eq 0 ]] || { echo "Run this with sudo - it writes Quadlet units." >&2; exit 1; }
+
+VERSION="${VERSION:-0.4.20}"
+ROOT="${ROOT:-/srv/trustify}"
+IMAGE="${IMAGE:-registry.access.redhat.com/ubi10/ubi:latest}"
+PORT="${PORT:-8080}"
+RUN_UID="${RUN_UID:-1000}"          # embedded postgres refuses to run as root
+ASSET="trustd-pm-${VERSION}-x86_64-unknown-linux-gnu"
+URL="https://github.com/guacsec/trustify/releases/download/v${VERSION}/${ASSET}.tar.gz"
+
+mkdir -p "${ROOT}" "${ROOT}/data"
+
+if [[ ! -x "${ROOT}/${ASSET}/trustd-pm" ]]; then
+    echo "== fetching trustd-pm ${VERSION} =="
+    # The release lives on the upstream project. trustification/rhtpa is the
+    # RHTPA product source and is currently byte-identical to guacsec/trustify
+    # (0 commits ahead, 0 behind), but publishes no release artifacts - its own
+    # Quick Start links here.
+    curl -sSL --retry 3 -o "${ROOT}/${ASSET}.tar.gz" "${URL}"
+    tar xzf "${ROOT}/${ASSET}.tar.gz" -C "${ROOT}"
+    echo "   $(du -h "${ROOT}/${ASSET}/trustd-pm" | cut -f1)  ${ROOT}/${ASSET}/trustd-pm"
+fi
+chown -R "${RUN_UID}:${RUN_UID}" "${ROOT}"
+
+echo "== PM mode prerequisite: IPv6 loopback =="
+# The README states it and the failure is obscure if it is missing.
+if [[ ! -f /proc/net/if_inet6 ]] || ! getent hosts localhost | grep -q '::1'; then
+    echo "   WARNING: localhost does not resolve to ::1. PM mode may not start." >&2
+else
+    echo "   ok - localhost resolves to ::1"
+fi
+
+echo "== writing the Quadlet unit =="
+# Quadlet rather than `podman run`, for the same reason the Lightwell index
+# uses it: a bare `podman run -d` is gone after a reboot, and finding that out
+# mid-recording is a bad time.
+cat > /etc/containers/systemd/trustify.container <<UNIT
+[Unit]
+Description=Trustify - local SBOM/VEX correlation (upstream of Red Hat TPA)
+Documentation=https://github.com/trustification/rhtpa
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=${IMAGE}
+Exec=${ROOT}/${ASSET}/trustd-pm
+User=${RUN_UID}
+Group=${RUN_UID}
+Network=host
+Volume=${ROOT}:${ROOT}:Z
+WorkingDir=${ROOT}/data
+Environment=AUTH_DISABLED=true
+Environment=HOME=${ROOT}/data
+Environment=TZ=UTC
+Environment=HTTP_SERVER_BIND_ADDR=0.0.0.0
+ContainerName=trustify
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target
+UNIT
+echo "   /etc/containers/systemd/trustify.container"
+
+echo "== opening the port =="
+# Without this the service binds 0.0.0.0 and is still unreachable: firewalld's
+# public zone permits cockpit and ssh but not 8080, so a remote browser gets a
+# silent filter and the service looks broken.
+if firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-port="${PORT}/tcp" >/dev/null
+    firewall-cmd --reload >/dev/null
+    echo "   ${PORT}/tcp allowed: $(firewall-cmd --list-ports)"
+else
+    echo "   firewalld not running - nothing to open"
+fi
+
+echo "== starting =="
+podman rm -f trustify >/dev/null 2>&1 || true
+systemctl daemon-reload
+systemctl restart trustify.service
+
+for i in $(seq 1 90); do
+    if curl -fsS -m2 "http://localhost:${PORT}/api/v2/sbom" >/dev/null 2>&1; then
+        echo "   ready after ${i}s"
+        break
+    fi
+    sleep 1
+done
+
+systemctl is-active trustify.service | sed 's/^/   unit: /'
+IP=$(hostname -I | awk '{print $1}')
+cat <<NEXT
+
+Trustify ${VERSION} is up.
+
+  UI    http://${IP}:${PORT}          <- open the Vulnerabilities page, not the
+  API   http://${IP}:${PORT}/openapi.json    dashboard (see the note above)
+
+Load the demo content:
+  ./scripts/trustify-flow.sh
+
+Note this build serves /api/v2/... . The upstream main branch has moved to
+/api/v3/..., so a spec read from GitHub will not match this server. Ask the
+server itself: curl http://localhost:${PORT}/openapi.json
+NEXT

@@ -177,6 +177,17 @@ cat > "${FILE}" <<JSON
           "details": "Use ${FIXED_VER}, which carries the backported fix with no API change.",
           "product_ids": ["CSAFPID-0001"]
         }
+      ],
+      "scores": [
+        {
+          "products": ["CSAFPID-0001", "CSAFPID-0002"],
+          "cvss_v3": {
+            "version": "3.1",
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+            "baseScore": 5.4,
+            "baseSeverity": "MEDIUM"
+          }
+        }
       ]
     },
     {
@@ -196,6 +207,17 @@ cat > "${FILE}" <<JSON
           "details": "Use ${FIXED_VER}, which carries the backported fix with no API change.",
           "product_ids": ["CSAFPID-0001"]
         }
+      ],
+      "scores": [
+        {
+          "products": ["CSAFPID-0001", "CSAFPID-0002"],
+          "cvss_v3": {
+            "version": "3.1",
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+            "baseScore": 5.4,
+            "baseSeverity": "MEDIUM"
+          }
+        }
       ]
     },
     {
@@ -214,6 +236,17 @@ cat > "${FILE}" <<JSON
           "details": "No backport is available in the 2.11.x line. Upstream addresses this in 3.1.5.",
           "product_ids": ["CSAFPID-0001", "CSAFPID-0002"]
         }
+      ],
+      "scores": [
+        {
+          "products": ["CSAFPID-0001", "CSAFPID-0002"],
+          "cvss_v3": {
+            "version": "3.1",
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+            "baseScore": 7.8,
+            "baseSeverity": "HIGH"
+          }
+        }
       ]
     },
     {
@@ -221,7 +254,8 @@ cat > "${FILE}" <<JSON
       "title": "Sandbox escape through the attr filter",
       "notes": [
         { "category": "description", "text": "A sandbox escape via the |attr filter. Not related to the xmlattr filter." },
-        { "category": "details", "text": "NOT addressed by this backport, which modifies only do_xmlattr. Both products remain affected." }
+        { "category": "details", "text": "NOT addressed by this backport, which modifies only do_xmlattr. Both products remain affected." },
+        { "category": "general", "title": "No CVSS v3 score is asserted for this issue", "text": "This vulnerability was published with a CVSS v4.0 vector only (CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N). CSAF 2.0 scores can express CVSS v2 and v3 but not v4, so no score is asserted here rather than a v3 value being invented. Consumers will display this issue without a severity; that is a limitation of the document format, not a judgement that the issue is unimportant." }
       ],
       "product_status": {
         "known_affected": ["CSAFPID-0001", "CSAFPID-0002"]
@@ -264,8 +298,30 @@ jq -r '
                                                           + "every product carries a purl",
     has((.vulnerabilities|length) > 0)               + "vulnerabilities",
     has(all(.vulnerabilities[]; .product_status != null)) + "every vulnerability has product_status",
-    has(all(.vulnerabilities[]; (.remediations|length) > 0)) + "every vulnerability has a remediation"
+    has(all(.vulnerabilities[]; (.remediations|length) > 0)) + "every vulnerability has a remediation",
+    has([.vulnerabilities[] | select(.scores != null)] | length == 3)
+                                                          + "three vulnerabilities carry a CVSS v3 score",
+    has(any(.vulnerabilities[]; .cve == "CVE-2024-56326"
+            and (.scores[0].cvss_v3.baseScore == 7.8)
+            and (.scores[0].cvss_v3.baseSeverity == "HIGH")))
+                                                          + "CVE-2024-56326 is scored 7.8 HIGH"
   ] | .[]' "${FILE}"
+
+# Without scores, any consumer that treats this VEX as the authoritative source
+# displays these CVEs with NO severity - which put the CVSS 7.8 sandbox escape
+# on screen as "None (0)" next to two Mediums. Verified in the trustify UI.
+# The scores below are the PUBLISHED vectors, taken from the osv.dev records
+# and checked by recomputing the base score from the vector:
+#
+#   CVE-2024-22195  AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N   5.4  MEDIUM
+#   CVE-2024-34064  same vector                           5.4  MEDIUM
+#   CVE-2024-56326  AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H   7.8  HIGH
+#   CVE-2025-27516  published with a CVSS v4 vector only - no v3 asserted
+#
+# CVE-2025-27516 deliberately carries no score: CSAF 2.0 has no field for a v4
+# vector, and inventing a v3 value to fill a column would be exactly the kind
+# of quiet fabrication this document exists to avoid. It carries a note saying
+# so instead.
 
 echo
 echo "== what this document asserts =="
