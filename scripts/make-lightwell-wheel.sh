@@ -86,8 +86,21 @@ fi
 echo "== diff against ${BASE_TAG} =="
 git diff "${BASE_TAG}" --stat
 echo
-echo "Show this on camera in Act 3:"
-echo "  git -C ${WORK} diff ${BASE_TAG}"
+# Hand the tree back to whoever invoked sudo. Without this it stays root-owned
+# and a plain `git -C /tmp/lightwell-backport diff` refuses with "detected
+# dubious ownership", which on some git versions surfaces as the far more
+# confusing "error: Could not access '2.11.3'".
+if [[ -n "${SUDO_UID:-}" ]]; then
+    chown -R "${SUDO_UID}:${SUDO_GID:-${SUDO_UID}}" "${WORK}"
+    echo "   tree handed back to uid ${SUDO_UID} so git works without sudo"
+fi
+echo
+echo "Show this on camera in Act 3 - BOTH files, or you are showing the"
+echo "xmlattr fix and silently omitting the sandbox one:"
+echo "  git -C ${WORK} diff ${BASE_TAG} -- src/jinja2/filters.py src/jinja2/sandbox.py"
+echo
+echo "Or just the shape of it:"
+echo "  git -C ${WORK} diff --stat ${BASE_TAG}"
 echo
 
 # Stamp the Lightwell version. Jinja2 2.11 keeps __version__ in src/jinja2/__init__.py.

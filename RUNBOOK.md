@@ -551,8 +551,31 @@ an editor** — 22 insertions in one file, and fifteen seconds of it on screen i
 worth a paragraph of narration:
 
 ```bash
-ssh im-builder 'cd /tmp/lightwell-backport && git --no-pager diff 2.11.3 -- src/jinja2/filters.py'
+ssh im-builder 'git -C /tmp/lightwell-backport --no-pager diff --stat 2.11.3'
 ```
+
+```
+ src/jinja2/__init__.py |  2 +-      <- the +rhlw00001 version stamp
+ src/jinja2/filters.py  | 55 +++--    <- xmlattr, and the attr filter
+ src/jinja2/sandbox.py  | 42 ++--     <- the two sandbox escapes
+ 3 files changed, 64 insertions(+), 35 deletions(-)
+```
+
+Then the diff itself — **both source files**:
+
+```bash
+ssh im-builder 'git -C /tmp/lightwell-backport --no-pager diff 2.11.3 -- src/jinja2/filters.py src/jinja2/sandbox.py'
+```
+
+**Do not show `filters.py` alone.** It carries the xmlattr work and half of the
+attr-filter fix, but the sandbox change lives in `sandbox.py` — so a
+filters-only diff shows two CVEs' worth of code while you claim four. That is
+the single easiest thing for a viewer to catch.
+
+If `git` refuses with *dubious ownership* or *could not access '2.11.3'*, the
+tree is still root-owned from an older `sudo ./scripts/make-lightwell-wheel.sh`
+run. The script now hands it back on exit; for a tree built before that, use
+`sudo git -C /tmp/lightwell-backport …`.
 
 > "That is the entire patch. Four lines of security logic, in the version I
 > already run. Not a new major release with a migration attached to it."
