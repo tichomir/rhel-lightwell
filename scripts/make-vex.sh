@@ -30,23 +30,40 @@
 # affected, and no version string can ever fix that. An out-of-band assertion
 # is the only mechanism available, which is what VEX is.
 #
-# THE PART THAT MAKES THIS HONEST
+# WHAT THIS ASSERTS, AND WHAT BACKS IT
 #
-# The backport in patches/0001 touches ONE function - do_xmlattr. So it fixes
-# the two xmlattr CVEs and nothing else:
+# All four CVEs in this package are closed by the backport:
 #
-#   CVE-2024-22195   xmlattr, space in attribute name      FIXED by the backport
-#   CVE-2024-34064   xmlattr, further characters           FIXED by the backport
-#   CVE-2024-56326   sandbox escape via str.format         STILL AFFECTED
-#   CVE-2025-27516   sandbox escape via |attr filter       STILL AFFECTED
+#   CVE-2024-22195   xmlattr, space in attribute name      patches/0001
+#   CVE-2024-34064   xmlattr, further characters           patches/0001
+#   CVE-2024-56326   sandbox escape via str.format         patches/0002
+#   CVE-2025-27516   sandbox escape via |attr filter       patches/0002
 #
-# So this VEX asserts `fixed` for two and `known_affected` for two. Asserting
-# all four would be a false vendor statement, in a demo whose entire credibility
-# rests on not doing that.
+# This is a complete statement, and it is only defensible because it was
+# verified rather than assumed. Each claim rests on upstream's OWN proof of
+# concept, copied verbatim from the fix commits into tests/test_sandbox_cve.py
+# and tests/test_cve.py:
 #
-# It also makes a better scene: two findings flip, two stay red, and the two
-# that stay are the sandbox escapes - including the CVSS 7.8. "Partial
-# remediation, honestly labelled" is what real vendor VEX looks like.
+#   unpatched 2.11.3   CVE-2024-56326 renders '<built-in function __import__>'
+#   the backport       all four blocked - SecurityError or ValueError
+#
+# And the backport introduces nothing: jinja2 2.11.3's own 747-test suite gives
+# IDENTICAL failure sets patched and pristine - 14 in both, every one of them a
+# 2.11.3 incompatibility with Python 3.12 rather than anything we did.
+#
+# ONE SUBTLETY WORTH KNOWING BEFORE SOMEONE ASKS
+#
+# CVE-2025-27516's published proof of concept is ALREADY blocked on unpatched
+# 2.11.3, because 2.11.3 sandboxes str.format at call time and that hook
+# catches it. The CVE is really a regression introduced by the 3.1.5 fix, which
+# moved sandboxing to access time and left do_attr behind. osv.dev records the
+# range as "introduced: 0", which is over-broad for the 2.11.x line.
+#
+# This document still reports CSAFPID-0001 as known_affected for it, which is
+# the conservative reading: one blocked proof of concept is not proof that no
+# attr-filter escape exists in 2.11.3. What the backport genuinely does there
+# is PRESERVE the protection - applying the sandbox half of patches/0002 alone
+# would have introduced the CVE.
 #
 # WHY THE PRODUCT TREE USES `branches` AND NOT `full_product_names`
 #
@@ -64,7 +81,7 @@
 # immediately. Measured, on the remediated build:
 #
 #   before      4 CVEs reported affected by this VEX
-#   after       2 - the two xmlattr CVEs dropped off, marked fixed
+#   after       0 - all four dropped off, marked fixed
 #
 # So if a VEX ever appears to upload cleanly and change nothing, this is the
 # first thing to check. It is almost certainly why an earlier upload of this
@@ -94,7 +111,7 @@ cat > "${FILE}" <<JSON
   "document": {
     "category": "csaf_vex",
     "csaf_version": "2.0",
-    "title": "Lab-authored VEX: ${PKG} ${FIXED_VER} (backported xmlattr fix)",
+    "title": "Lab-authored VEX: ${PKG} ${FIXED_VER} (complete backport, all four CVEs)",
     "publisher": {
       "category": "other",
       "name": "rh-lab - LOCALLY AUTHORED, NOT A RED HAT STATEMENT",
@@ -127,7 +144,7 @@ cat > "${FILE}" <<JSON
       {
         "category": "general",
         "title": "Scope of the backport",
-        "text": "The backport modifies a single function, do_xmlattr, and therefore addresses only the two attribute-name injection issues. The two sandbox-escape vulnerabilities in the same version are NOT addressed and are reported here as still affected."
+        "text": "The backport addresses all four published vulnerabilities in this version: the two attribute-name injection issues in the xmlattr filter, and the two sandbox escapes. Each is verified against the proof-of-concept template published in the corresponding upstream fix commit. The backport changes two files and adds no API."
       }
     ]
   },
@@ -225,16 +242,17 @@ cat > "${FILE}" <<JSON
       "title": "Sandbox escape through an indirect reference to str.format",
       "notes": [
         { "category": "description", "text": "A sandbox escape permitting execution of arbitrary Python code. Not related to the xmlattr filter." },
-        { "category": "details", "text": "NOT addressed by this backport, which modifies only do_xmlattr. Both products remain affected. This is the highest-severity issue in this set." }
+        { "category": "details", "text": "Addressed in ${FIXED_VER} by sandboxing str.format at attribute-access time rather than at call time, derived from upstream commit 48b0687e. This is the highest-severity issue in this set." }
       ],
       "product_status": {
-        "known_affected": ["CSAFPID-0001", "CSAFPID-0002"]
+        "known_affected": ["CSAFPID-0001"],
+        "fixed": ["CSAFPID-0002"]
       },
       "remediations": [
         {
-          "category": "none_available",
-          "details": "No backport is available in the 2.11.x line. Upstream addresses this in 3.1.5.",
-          "product_ids": ["CSAFPID-0001", "CSAFPID-0002"]
+          "category": "vendor_fix",
+          "details": "Use ${FIXED_VER}, which carries the backported fix with no API change.",
+          "product_ids": ["CSAFPID-0001"]
         }
       ],
       "scores": [
@@ -254,17 +272,18 @@ cat > "${FILE}" <<JSON
       "title": "Sandbox escape through the attr filter",
       "notes": [
         { "category": "description", "text": "A sandbox escape via the |attr filter. Not related to the xmlattr filter." },
-        { "category": "details", "text": "NOT addressed by this backport, which modifies only do_xmlattr. Both products remain affected." },
+        { "category": "details", "text": "Addressed in ${FIXED_VER} by routing the attr filter through environment.getattr, derived from upstream commit 90457bbf. Note that unpatched 2.11.3 already blocks the published proof of concept, because it sandboxes str.format at call time; the backport preserves that while fixing CVE-2024-56326, which would otherwise have removed the protection." },
         { "category": "general", "title": "No CVSS v3 score is asserted for this issue", "text": "This vulnerability was published with a CVSS v4.0 vector only (CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N). CSAF 2.0 scores can express CVSS v2 and v3 but not v4, so no score is asserted here rather than a v3 value being invented. Consumers will display this issue without a severity; that is a limitation of the document format, not a judgement that the issue is unimportant." }
       ],
       "product_status": {
-        "known_affected": ["CSAFPID-0001", "CSAFPID-0002"]
+        "known_affected": ["CSAFPID-0001"],
+        "fixed": ["CSAFPID-0002"]
       },
       "remediations": [
         {
-          "category": "none_available",
-          "details": "No backport is available in the 2.11.x line. Upstream addresses this in 3.1.6.",
-          "product_ids": ["CSAFPID-0001", "CSAFPID-0002"]
+          "category": "vendor_fix",
+          "details": "Use ${FIXED_VER}, which carries the backported fix with no API change.",
+          "product_ids": ["CSAFPID-0001"]
         }
       ]
     }
@@ -301,6 +320,8 @@ jq -r '
     has(all(.vulnerabilities[]; (.remediations|length) > 0)) + "every vulnerability has a remediation",
     has([.vulnerabilities[] | select(.scores != null)] | length == 3)
                                                           + "three vulnerabilities carry a CVSS v3 score",
+    has(all(.vulnerabilities[]; (.product_status.fixed // []) | index("CSAFPID-0002")))
+                                                          + "all four CVEs are fixed in the backport",
     has(any(.vulnerabilities[]; .cve == "CVE-2024-56326"
             and (.scores[0].cvss_v3.baseScore == 7.8)
             and (.scores[0].cvss_v3.baseSeverity == "HIGH")))
