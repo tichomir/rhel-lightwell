@@ -35,10 +35,14 @@
 # makes and you do not have to demonstrate.
 #
 # AND SAY THIS TOO: the same grype report carries CVE-2024-56326 at CVSS 7.8 -
-# a sandbox escape, and the genuinely serious one. It is not what is being
-# shown here, precisely because it is serious. Saying that distinction out loud
-# is more honest and sounds more competent than implying the XSS is the whole
-# story.
+# a sandbox escape, and the most serious of the four. It is NOT what is shown
+# here, and deliberately so: a working sandbox escape is a payload, and this
+# scene exists to avoid putting one in a recording. The backport fixes it and
+# tests/test_sandbox_cve.py proves that with upstream's own proof of concept -
+# so the place to demonstrate it is the test suite, not the screen.
+#
+# Saying that distinction out loud is more honest and sounds more competent
+# than implying this attribute injection is the whole story.
 set -uo pipefail
 
 APP_PY="${APP_PY:-/opt/app/venv/bin/python}"
@@ -126,6 +130,12 @@ dim "  intended is exposed; this app is not, because it escapes. Defence in"
 dim "  depth saved it, and relying on that is not a patching strategy."
 echo
 dim "  And CVE-2024-56326 in the same grype report is a SANDBOX ESCAPE at CVSS"
-dim "  7.8 - the genuinely serious one. It is deliberately not what is being"
-dim "  demonstrated. Say that out loud: it is more honest, and it sounds more"
-dim "  competent than implying this XSS is the whole story."
+dim "  7.8 - the most serious of the four, and arbitrary code execution rather"
+dim "  than attribute injection. It is deliberately NOT demonstrated here: a"
+dim "  working sandbox escape is a payload, and this scene exists to avoid"
+dim "  putting one in a recording."
+echo
+dim "  It IS fixed by the backport, and proved in tests/test_sandbox_cve.py"
+dim "  using the proof-of-concept template from upstream's own fix commit. On"
+dim "  unpatched 2.11.3 that template renders the __import__ builtin. The right"
+dim "  place to show that is the test run, not the screen."

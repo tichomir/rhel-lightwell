@@ -21,8 +21,8 @@ both travel the same path, and the retake loop is six seconds.
 | `jinja2==2.11.3` installs and works on RHEL 10's Python 3.12.14 | Yes — `asyncsupport` is never reached |
 | `xmlattr` emits the unsafe attribute name | Yes — the vulnerable act has something to show |
 | Upstream fix cherry-picks cleanly | **No** — resolved patch in `patches/`, see below |
-| Backported wheel builds | Yes — `jinja2-2.11.3+rhlw00001-py2.py3-none-any.whl` |
-| Full suite, unmodified, against **live PostgreSQL** | **20 passed, 0 skipped** |
+| Backported wheel builds | Yes — `jinja2-2.11.3+rhlw00001-py2.py3-none-any.whl`, **all four CVEs closed** |
+| Full suite, unmodified, against **live PostgreSQL** | **24 passed, 0 skipped** |
 | `rhel-bootc` 10.1 **and** 10.2 both published | Yes — the OS delta is real |
 | Three images built, pushed, publicly pullable | Yes — verified anonymously |
 | Both guests boot image-mode, `bootc status` clean | Yes — RHEL 10.1 |
@@ -30,11 +30,11 @@ both travel the same path, and the retake loop is six seconds.
 | Snapshot revert actually discards changes | Yes — tested with a marker file |
 | `reset.sh` end to end | **~6 seconds** |
 | OS act: `10.1 → 10.2` rebuild, promote, `bootc upgrade` | Yes — `os_version` moves, app unaffected |
-| `bootc rollback` and forward again | Yes — **2.9s**, no download |
+| `bootc rollback` and forward again | Yes — **3.2-4.2s**, no download |
 | grype scans, all four views | Yes — numbers in the runbook are measured |
 | Track B index serving over TLS | Yes — `pip index versions` sees only `2.11.3+rhlw00001` |
-| Remediated build, unmodified suite | **20 passed** — identical to the vulnerable state |
-| App patch deployed via `bootc upgrade` | Yes — **20s / 31.5 MB**, CVE observable gone |
+| Remediated build, unmodified suite | **24 passed** — identical to the vulnerable state |
+| App patch deployed via `bootc upgrade` | Yes — **12-27s / 27.1 MB**, CVE observable gone |
 | `/var` survives, db tier never moves | Yes — bookings intact, `rollback: null` on the db |
 
 Still to do: Act 5 is slides. Track A needs `LW00007` before the remediation
@@ -47,9 +47,16 @@ See [RUNBOOK.md](RUNBOOK.md) for the per-act recording script.
 Neither upstream fix commit lands on 2.11.3: 3.1.x carries type annotations,
 f-strings and `pass_eval_context` where 2.11.3 has `evalcontextfilter` and
 `iteritems()`. The conflicts are era-related rather than semantic — the security
-logic is four lines and identical — so the resolved backport is committed as a
-patch in `patches/`, with its provenance in the header, and
-`make-lightwell-wheel.sh` applies it by default.
+logic is identical — so the resolved backports are committed as patches in
+`patches/`, each with its provenance and verification in the header, and
+`make-lightwell-wheel.sh` applies them in order by default.
+
+**Two patches, four CVEs.** `0001` fixes the two `xmlattr` attribute-injection
+issues; `0002` fixes the two sandbox escapes, including CVE-2024-56326 at CVSS
+7.8. Order matters — both touch `filters.py`. Each claim is verified against
+the proof-of-concept template from the corresponding upstream fix commit, in
+`tests/test_cve.py` and `tests/test_sandbox_cve.py`, and jinja2 2.11.3's own
+747-test suite gives identical failure sets patched and pristine.
 
 The backport must be the **cumulative 3.1.4** behaviour, not just 3.1.3.
 `tests/test_cve.py` parametrises over all four illegal characters, and a
@@ -318,8 +325,9 @@ the most credible ninety seconds in the recording:
 1. Show the scanner still red. Explain why, plainly.
 2. Show the test suite green — API compatibility and the CVE observable.
 3. Show the VEX statement as where this is heading — `scripts/make-vex.sh`
-   builds one, and the narration for it is in **RUNBOOK.md → "The story to tell:
-   two SBOMs and a VEX"**. Say on camera that you authored it.
+   builds one asserting all four CVEs fixed, and `scripts/trustify-flow.sh`
+   correlates it with the SBOMs in a local Trustify, the engine TPA is built
+   from. Narration in **RUNBOOK.md**. Say on camera that you authored the VEX.
 4. Land the point: your scanner report and your actual risk are not the same
    document.
 
