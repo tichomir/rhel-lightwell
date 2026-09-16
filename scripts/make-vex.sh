@@ -47,6 +47,28 @@
 # It also makes a better scene: two findings flip, two stay red, and the two
 # that stay are the sandbox escapes - including the CVSS 7.8. "Partial
 # remediation, honestly labelled" is what real vendor VEX looks like.
+#
+# WHY THE PRODUCT TREE USES `branches` AND NOT `full_product_names`
+#
+# Both are valid CSAF 2.0. Only one of them correlates.
+#
+# Verified against a local trustify 0.4.20 - the same engine Trusted Profile
+# Analyzer is built from: a VEX whose products sit in a flat
+# `product_tree.full_product_names` array is INGESTED WITHOUT ERROR - 201
+# Created, issuer parsed, all four CVEs listed - and then attaches to nothing.
+# The purl never links, so no SBOM finding is ever affected by it. There is no
+# warning anywhere; the document simply sits there being correct and inert.
+#
+# Moving the same two products into a vendor -> product_version branch, each
+# carrying the same `product_identification_helper.purl`, made it correlate
+# immediately. Measured, on the remediated build:
+#
+#   before      4 CVEs reported affected by this VEX
+#   after       2 - the two xmlattr CVEs dropped off, marked fixed
+#
+# So if a VEX ever appears to upload cleanly and change nothing, this is the
+# first thing to check. It is almost certainly why an earlier upload of this
+# document to TPA produced no visible change.
 set -euo pipefail
 
 OUT="${OUT:-/srv/vex}"
@@ -54,10 +76,13 @@ PKG="${PKG:-jinja2}"
 VULN_VER="${VULN_VER:-2.11.3}"
 FIXED_VER="${FIXED_VER:-2.11.3+rhlw00001}"
 
-# purl version encoding must match what the SBOM contains, or nothing
-# correlates. syft emits the '+' percent-encoded, so do the same. If your
-# ingesting tool does not match, try the literal '+' form instead.
-FIXED_PURL_VER="${FIXED_PURL_VER:-2.11.3%2Brhlw00001}"
+# purl version encoding. syft writes the '+' percent-encoded in the SBOM, but
+# trustify normalises both forms to a literal '+' when it stores the purl -
+# VERIFIED against a local trustify 0.4.20: an SBOM containing
+# pkg:pypi/jinja2@2.11.3%2Brhlw00001 is stored as pkg:pypi/jinja2@2.11.3+rhlw00001,
+# and a VEX using the literal form matches it. So the literal form is the
+# default; override if some other ingesting tool disagrees.
+FIXED_PURL_VER="${FIXED_PURL_VER:-2.11.3+rhlw00001}"
 
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ID="RHLAB-VEX-$(date -u +%Y)-0001"
@@ -107,16 +132,30 @@ cat > "${FILE}" <<JSON
     ]
   },
   "product_tree": {
-    "full_product_names": [
+    "branches": [
       {
-        "product_id": "CSAFPID-0001",
-        "name": "${PKG} ${VULN_VER} (upstream, unpatched)",
-        "product_identification_helper": { "purl": "pkg:pypi/${PKG}@${VULN_VER}" }
-      },
-      {
-        "product_id": "CSAFPID-0002",
-        "name": "${PKG} ${FIXED_VER} (lab backport)",
-        "product_identification_helper": { "purl": "pkg:pypi/${PKG}@${FIXED_PURL_VER}" }
+        "category": "vendor",
+        "name": "rh-lab (LOCALLY AUTHORED, NOT A RED HAT STATEMENT)",
+        "branches": [
+          {
+            "category": "product_version",
+            "name": "${PKG} ${VULN_VER}",
+            "product": {
+              "product_id": "CSAFPID-0001",
+              "name": "${PKG} ${VULN_VER} (upstream, unpatched)",
+              "product_identification_helper": { "purl": "pkg:pypi/${PKG}@${VULN_VER}" }
+            }
+          },
+          {
+            "category": "product_version",
+            "name": "${PKG} ${FIXED_VER}",
+            "product": {
+              "product_id": "CSAFPID-0002",
+              "name": "${PKG} ${FIXED_VER} (lab backport)",
+              "product_identification_helper": { "purl": "pkg:pypi/${PKG}@${FIXED_PURL_VER}" }
+            }
+          }
+        ]
       }
     ]
   },
@@ -220,7 +259,9 @@ jq -r '
     has(.document.tracking.initial_release_date)     + "document.tracking.initial_release_date",
     has(.document.tracking.current_release_date)     + "document.tracking.current_release_date",
     has((.document.tracking.revision_history|length) > 0) + "document.tracking.revision_history",
-    has((.product_tree.full_product_names|length) > 0)    + "product_tree.full_product_names",
+    has((.product_tree.branches|length) > 0)              + "product_tree.branches",
+    has(all(.product_tree.branches[].branches[].product.product_identification_helper.purl; . != null))
+                                                          + "every product carries a purl",
     has((.vulnerabilities|length) > 0)               + "vulnerabilities",
     has(all(.vulnerabilities[]; .product_status != null)) + "every vulnerability has product_status",
     has(all(.vulnerabilities[]; (.remediations|length) > 0)) + "every vulnerability has a remediation"
