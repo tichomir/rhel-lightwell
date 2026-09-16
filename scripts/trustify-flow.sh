@@ -82,10 +82,10 @@ up() { # path file content-type label
     [[ "${code}" == 2* ]]
 }
 
-verdict() { # expected number of `fixed` assertions (0 before the VEX, 2 after)
-    python3 - "${API}" "${1:-2}" ${CVES} <<'PY'
+verdict() { # expected number of `fixed` assertions (0 before the VEX, 4 after)
+    python3 - "${API}" "${V}" "${1:-4}" ${CVES} <<'PY'
 import json, sys, urllib.request, collections
-api, want_fixed, cves = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
+api, V, want_fixed, cves = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4:]
 
 def get(p):
     with urllib.request.urlopen(api + p, timeout=120) as r:
