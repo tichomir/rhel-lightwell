@@ -734,6 +734,108 @@ security document disagree with itself in public and hold up.
 - Do **not** promise a delivery date for the Lightwell security feed. "In
   progress, and this is the shape of it" is both true and enough.
 
+### Closing the loop — the VEX, correlated by TPA's own engine
+
+This is the scene that turns Act 3's last claim from a promise into a
+demonstration. Up to this point every assertion has been shown; "a VEX
+statement is where this is heading" was the one thing only said.
+
+**Stand it up once, before recording:**
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && sudo ./scripts/serve-trustify.sh'
+```
+
+That installs a Quadlet unit, so it survives a reboot like the Lightwell index
+does. The UI is then on `http://192.168.122.195:8080` with **no SSH tunnel** —
+`serve-trustify.sh` opens 8080 in firewalld, which is the one thing that makes
+the difference between "binds 0.0.0.0" and "actually reachable".
+
+**What this is, and say it in these words:** Trustify is the upstream of Red
+Hat Trusted Profile Analyzer. `trustification/rhtpa` is the product's own
+source repository and is currently **byte-identical** to `guacsec/trustify` —
+0 commits ahead, 0 behind. So this is not an analogue of TPA. It is TPA's
+engine with a different badge.
+
+**Run the flow:**
+
+```bash
+ssh im-builder 'cd ~/rhel-lightwell && ./scripts/trustify-flow.sh'
+```
+
+Five steps, with the verdict printed twice — before the VEX and after:
+
+| Step | |
+|---|---|
+| 1 | both SBOMs — 3664 components each |
+| 2 | the public advisories — 8 GHSA + PYSEC records from osv.dev |
+| 3 | **ask: all four CVEs affected on both builds**, backport included |
+| 4 | the lab VEX — one document |
+| 5 | **ask again: two report `fixed`, two still `affected`** |
+
+**Step 3 is the beat worth pausing on.** Measured:
+
+```
+  remediated  2.11.3+rhlw00001
+      CVE-2024-22195     osv=affected   vex=-    (no VEX statement)
+      CVE-2024-34064     osv=affected   vex=-
+      CVE-2024-56326     osv=affected   vex=-
+      CVE-2025-27516     osv=affected   vex=-
+```
+
+> "That is the third independent tool to tell me this artifact is vulnerable —
+> grype, then Trusted Profile Analyzer, now its own upstream. Three tools are
+> not wrong. That is PEP 440 working exactly as written, and it is why no
+> version string could ever have fixed this."
+
+Then step 5, same screen:
+
+```
+      CVE-2024-22195     osv=affected   vex=fixed     <- the VEX overrides the feed
+      CVE-2024-34064     osv=affected   vex=fixed     <- the VEX overrides the feed
+      CVE-2024-56326     osv=affected   vex=affected
+      CVE-2025-27516     osv=affected   vex=affected
+```
+
+#### The GUI screen — this is the one to put on camera
+
+**Vulnerabilities → CVE-2024-22195 → Related SBOMs.** Three rows:
+
+| Name | Version | Status |
+|---|---|---|
+| im-train | 1.2 | Affected |
+| im-train | 1.1 | Affected |
+| im-train | **1.2** | **Fixed** |
+
+1.1 appears once. **1.2 appears twice** — `Affected` from the public feed,
+`Fixed` from the VEX. One CVE, one table, in a product UI, and it carries the
+entire act without narration.
+
+#### Two things that will bite you
+
+**Open on the Vulnerabilities page, not the dashboard.** The dashboard renders
+a red **"Unable to connect"**. One cause, and it is harmless:
+`/api/v2/userPreference/watched-sboms` returns 401 because `AUTH_DISABLED`
+means there is no user identity, so the "watched SBOMs" widget fails. Every
+other panel works. Do not try to fix it with the built-in OIDC server — its
+listener is hardcoded to `[::1]:8090`, so a remote browser can never complete
+a login, and every API call would then need a bearer token. Verified on
+0.4.20.
+
+**If nothing shows as `fixed`, it is the VEX product tree.** A VEX using a flat
+`product_tree.full_product_names` array uploads with `201 Created` and
+correlates with *nothing* — valid CSAF, completely inert, no warning anywhere.
+Only the `branches` form links to a purl. `make-vex.sh` emits the branches form
+and checks for it; this note exists because the flat form is what the first
+version of this demo shipped, and it is almost certainly why an earlier upload
+to TPA appeared to do nothing.
+
+#### Caption discipline, same as the index
+
+`AUTH_DISABLED=true` and a locally-authored vendor assertion are both on screen
+here. Say that you wrote the VEX. Everything else in this scene came from
+osv.dev and syft, and is checkable by anyone.
+
 ### The integrity rule
 
 Never show a `packages.redhat.com` URL while resolving from
