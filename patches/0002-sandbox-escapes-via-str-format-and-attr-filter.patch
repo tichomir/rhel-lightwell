@@ -1,0 +1,201 @@
+Backport: close the two sandbox escapes (str.format and the attr filter)
+========================================================================
+
+Target:   jinja2 2.11.3 (tag 2.11.3, pallets/jinja)
+Fixes:    CVE-2024-56326  (indirect reference to str.format;  upstream fix in 3.1.5)
+          CVE-2025-27516  (attr filter selects format;        upstream fix in 3.1.6)
+
+Upstream commits this is derived from:
+  48b0687e  sandbox indirect calls to str.format
+  90457bbf  attr filter uses env.getattr
+
+Apply AFTER 0001. Both patches touch filters.py; in the other order the
+do_attr hunk does not apply.
+
+What the two fixes actually do
+------------------------------
+2.11.3 sandboxes str.format at CALL time: SandboxedEnvironment.call() sniffs
+the callable with inspect_format_method() and reroutes it through
+format_string(). Anything that obtains the bound format method and calls it
+WITHOUT going through call() therefore escapes the sandbox - which is
+CVE-2024-56326. Upstream's answer is to sandbox at ACCESS time instead: getattr
+and getitem now wrap a str.format they are about to hand out, and the call-time
+hook is deleted.
+
+That relocation is what creates the second bug. do_attr used a raw getattr(),
+so once the call-time hook is gone, `x|attr("format")` hands back an unwrapped
+method - CVE-2025-27516. The fix routes do_attr through environment.getattr(),
+using inspect.getattr_static to check existence first so env.getattr's
+obj[name] fallback cannot be triggered by accident.
+
+The two must land together. Applying only the sandbox half would INTRODUCE
+CVE-2025-27516 into 2.11.3 - verified: the upstream PoC for it is already
+blocked on unpatched 2.11.3, precisely because the call-time hook catches it.
+
+Where this deviates from upstream, and why
+------------------------------------------
+wrap_str_format delegates to 2.11.3's existing format_string() rather than
+porting 3.1.x's reimplemented body. The vulnerability is WHEN sandboxing
+happens, not how the formatting is done, and 2.11.3's formatter carries
+_MagicFormatMapping for auto-numbered fields which 3.1.x no longer needs.
+Reusing the tested local path keeps the diff to the security change.
+
+Type annotations are dropped throughout (2.11.3 has none - it still claimed
+Python 2.7 support) and string_types is used in place of `str`.
+
+Verification
+------------
+Upstream PoCs, verbatim from the two fix commits, on ubi9/python-312 with
+markupsafe 2.0.1:
+
+  unpatched 2.11.3   CVE-2024-56326 EXPLOITED - renders
+                     '<built-in function __import__>'
+  patched            all four CVEs blocked (SecurityError / ValueError)
+
+jinja2 2.11.3's own test suite, 747 tests, patched vs pristine: failure sets
+IDENTICAL, 14 failures in both, stable across repeated runs. Those 14 are
+2.11.3's own Python 3.12 incompatibilities, not this patch.
+
+Two traps if you re-verify this yourself. jinja 2.11.3's setup.cfg sets
+`filterwarnings = error`, so a tree WITH setup.cfg reports ~105 more failures
+than one without - compare like with like. And under that setting the
+markupsafe soft_unicode DeprecationWarning attaches to whichever test first
+triggers a deferred import, so the failure set moves by one test between runs
+on identical code. Run pytest with -W ignore::DeprecationWarning to compare
+reliably.
+
+diff --git a/src/jinja2/filters.py b/src/jinja2/filters.py
+index c397b75b..9211d8f8 100644
+--- a/src/jinja2/filters.py
++++ b/src/jinja2/filters.py
+@@ -5,6 +5,7 @@ import random
+ import re
+ import warnings
+ from collections import namedtuple
++from inspect import getattr_static
+ from itertools import chain
+ from itertools import groupby
+ 
+@@ -1070,22 +1071,19 @@ def do_attr(environment, obj, name):
+ 
+     See :ref:`Notes on subscriptions <notes-on-subscriptions>` for more details.
+     """
++    # Environment.getattr will fall back to obj[name] if obj.name doesn't exist.
++    # But we want to call env.getattr to get behavior such as sandboxing.
++    # Determine if the attr exists first, so we know the fallback won't trigger.
+     try:
+-        name = str(name)
+-    except UnicodeError:
+-        pass
+-    else:
+-        try:
+-            value = getattr(obj, name)
+-        except AttributeError:
+-            pass
+-        else:
+-            if environment.sandboxed and not environment.is_safe_attribute(
+-                obj, name, value
+-            ):
+-                return environment.unsafe_undefined(obj, name)
+-            return value
+-    return environment.undefined(obj=obj, name=name)
++        # This avoids executing properties/descriptors, but misses __getattr__
++        # and __getattribute__ dynamic attrs.
++        getattr_static(obj, name)
++    except AttributeError:
++        # This finds dynamic attrs, and we know it's not a descriptor at this point.
++        if not hasattr(obj, name):
++            return environment.undefined(obj=obj, name=name)
++
++    return environment.getattr(obj, name)
+ 
+ 
+ @contextfilter
+diff --git a/src/jinja2/sandbox.py b/src/jinja2/sandbox.py
+index cfd7993a..3cf518a6 100644
+--- a/src/jinja2/sandbox.py
++++ b/src/jinja2/sandbox.py
+@@ -6,6 +6,7 @@ import operator
+ import types
+ import warnings
+ from collections import deque
++from functools import update_wrapper
+ from string import Formatter
+ 
+ from markupsafe import EscapeFormatter
+@@ -153,16 +154,6 @@ class _MagicFormatMapping(abc.Mapping):
+         return len(self._kwargs)
+ 
+ 
+-def inspect_format_method(callable):
+-    if not isinstance(
+-        callable, (types.MethodType, types.BuiltinMethodType)
+-    ) or callable.__name__ not in ("format", "format_map"):
+-        return None
+-    obj = callable.__self__
+-    if isinstance(obj, string_types):
+-        return obj
+-
+-
+ def safe_range(*args):
+     """A range that can't generate ranges with a length of more than
+     MAX_RANGE items.
+@@ -394,6 +385,9 @@ class SandboxedEnvironment(Environment):
+                     except AttributeError:
+                         pass
+                     else:
++                        fmt = self.wrap_str_format(value)
++                        if fmt is not None:
++                            return fmt
+                         if self.is_safe_attribute(obj, argument, value):
+                             return value
+                         return self.unsafe_undefined(obj, argument)
+@@ -411,6 +405,9 @@ class SandboxedEnvironment(Environment):
+             except (TypeError, LookupError):
+                 pass
+         else:
++            fmt = self.wrap_str_format(value)
++            if fmt is not None:
++                return fmt
+             if self.is_safe_attribute(obj, attribute, value):
+                 return value
+             return self.unsafe_undefined(obj, attribute)
+@@ -426,6 +423,27 @@ class SandboxedEnvironment(Environment):
+             exc=SecurityError,
+         )
+ 
++    def wrap_str_format(self, value):
++        """If the given value is a ``str.format`` or ``str.format_map`` method,
++        return a new function that handles sandboxing. This is done at access
++        rather than in :meth:`call`, so that calls made without ``call`` are
++        also sandboxed.
++        """
++        if not isinstance(
++            value, (types.MethodType, types.BuiltinMethodType)
++        ) or value.__name__ not in ("format", "format_map"):
++            return None
++
++        f_self = value.__self__
++
++        if not isinstance(f_self, string_types):
++            return None
++
++        def wrapper(*args, **kwargs):
++            return self.format_string(f_self, args, kwargs, value)
++
++        return update_wrapper(wrapper, value)
++
+     def format_string(self, s, args, kwargs, format_func=None):
+         """If a format call is detected, then this is routed through this
+         method so that our safety sandbox can be used for it.
+@@ -451,10 +469,6 @@ class SandboxedEnvironment(Environment):
+ 
+     def call(__self, __context, __obj, *args, **kwargs):  # noqa: B902
+         """Call an object from sandboxed code."""
+-        fmt = inspect_format_method(__obj)
+-        if fmt is not None:
+-            return __self.format_string(fmt, args, kwargs, __obj)
+-
+         # the double prefixes are to avoid double keyword argument
+         # errors when proxying the call.
+         if not __self.is_safe_callable(__obj):

@@ -20,7 +20,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="${REPO:-https://github.com/pallets/jinja.git}"
 BASE_TAG="${BASE_TAG:-2.11.3}"
 FIX_COMMIT="${FIX_COMMIT:-}"
-PATCH="${PATCH:-${ROOT}/patches/0001-xmlattr-reject-invalid-attribute-names.patch}"
+# ORDER MATTERS. 0001 and 0002 both touch filters.py; applied the other way
+# round, 0002's do_attr hunk does not apply. Between them the four CVEs in this
+# package are closed - see each patch header for the upstream commits and the
+# verification.
+PATCHES=(
+    "${ROOT}/patches/0001-xmlattr-reject-invalid-attribute-names.patch"
+    "${ROOT}/patches/0002-sandbox-escapes-via-str-format-and-attr-filter.patch"
+)
 WORK="${WORK:-/tmp/lightwell-backport}"
 OUT="${OUT:-/srv/lightwell-mirror/packages}"
 
@@ -61,16 +68,19 @@ if [[ -n "${FIX_COMMIT}" ]]; then
 fi
 
 if [[ -z "${FIX_COMMIT}" ]]; then
-    [[ -f "${PATCH}" ]] || { echo "Patch not found: ${PATCH}" >&2; exit 1; }
-    echo "== applying $(basename "${PATCH}") onto ${BASE_TAG} =="
-    git apply --verbose "${PATCH}" || {
-        echo "Patch did not apply. Is BASE_TAG=${BASE_TAG} right?" >&2
-        echo "Working tree left at ${WORK} for inspection." >&2
-        exit 1
-    }
+    for P in "${PATCHES[@]}"; do
+        [[ -f "${P}" ]] || { echo "Patch not found: ${P}" >&2; exit 1; }
+        echo "== applying $(basename "${P}") onto ${BASE_TAG} =="
+        git apply --verbose "${P}" || {
+            echo "Patch did not apply. Is BASE_TAG=${BASE_TAG} right, and are" >&2
+            echo "the patches being applied in order?" >&2
+            echo "Working tree left at ${WORK} for inspection." >&2
+            exit 1
+        }
+    done
     # Left uncommitted on purpose: `git diff ${BASE_TAG}` below then shows the
-    # backport straight from the working tree, and the script does not need a
-    # configured git identity on the builder.
+    # whole backport straight from the working tree, and the script does not
+    # need a configured git identity on the builder.
 fi
 
 echo "== diff against ${BASE_TAG} =="
