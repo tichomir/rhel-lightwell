@@ -30,9 +30,9 @@
 #   3. ask about each build            ALL FOUR CVEs affected on BOTH builds,
 #                                      including the remediated one
 #   4. load the lab VEX                one document
-#   5. ask again                       the two xmlattr CVEs now report FIXED
-#                                      against the backport; the two sandbox
-#                                      escapes still report affected
+#   5. ask again                       ALL FOUR now report FIXED against the
+#                                      backport, and all four still report
+#                                      affected against the unpatched build
 #
 # Step 3 is the one worth pausing on. A third independent tool - after grype
 # and after TPA - looks at 2.11.3+rhlw00001 and calls it vulnerable to all
@@ -127,7 +127,7 @@ check("CVEs the VEX marks fixed on the backport", fixed_total, want_fixed)
 print()
 if not ok:
     if want_fixed:
-        print(f"{RED}  Expected the VEX to mark two CVEs fixed and it marked {fixed_total}.")
+        print(f"{RED}  Expected the VEX to mark {want_fixed} CVEs fixed and it marked {fixed_total}.")
         print(f"  The most likely cause by far: the VEX product_tree is the flat")
         print(f"  full_product_names form, which is valid CSAF and correlates with")
         print(f"  nothing at all. See the header of make-vex.sh.{OFF}")
@@ -137,8 +137,9 @@ if want_fixed == 0:
     print(f"  feed alone cannot tell these two builds apart. A third tool - after")
     print(f"  grype and after TPA - calls the backport vulnerable to all four.{OFF}")
 else:
-    print(f"{GRN}  Two fixed, two still affected. The backport covers what it covers,")
-    print(f"  and a machine agrees - from a document, not from narration.{OFF}")
+    print(f"{GRN}  All four fixed on the backport, all four still affected on the")
+    print(f"  unpatched build. A machine agrees - from a document and an SBOM,")
+    print(f"  not from narration.{OFF}")
 PY
 }
 
@@ -157,7 +158,7 @@ reset)
     exit 0
     ;;
 verdict)
-    verdict "${2:-2}"
+    verdict "${2:-4}"
     exit $?
     ;;
 gui)
@@ -185,8 +186,8 @@ gui)
 Ready for the GUI walk-through. Three clicks, in this order:
 
   1. SBOMs          two rows, 1.1 and 1.2, 3664 components each
-  2. Vulnerabilities   "Impacted SBOMs" reads  1, 1, 2, 2
-  3. CVE-2024-22195 -> Related SBOMs   1.1 Affected, 1.2 Fixed
+  2. Vulnerabilities   "Impacted SBOMs" reads  1, 1, 1, 1  - all four, one build
+  3. CVE-2024-56326 -> Related SBOMs   1.1 Affected, 1.2 Fixed  (the 7.8)
 
 Then, to show the gap honestly:
   ./scripts/trustify-flow.sh osv     <- adds the public feed; 1 becomes 2
@@ -205,7 +206,7 @@ osv)
         up /api/v2/advisory "$f" application/json "$(basename "$f" .json)" || true
     done
     dim "  Reload the Vulnerabilities page: Impacted SBOMs is now 2,2,2,2."
-    dim "  CVE-2024-22195 -> Related SBOMs still shows the Fixed row for 1.2."
+    dim "  CVE-2024-56326 -> Related SBOMs still shows the Fixed row for 1.2."
     exit 0
     ;;
 esac
@@ -255,7 +256,7 @@ fi
 up /api/v2/advisory "${VEX}" application/json "$(basename "${VEX}")" || exit 1
 
 bold "5. after the VEX - ask again"
-verdict 2
+verdict 4
 rc=$?
 
 cat <<NEXT
