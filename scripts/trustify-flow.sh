@@ -92,7 +92,15 @@ def get(p):
         return json.load(r)
 
 # Which purl is which build, straight from what trustify stored.
-purls = {p["purl"]: p["uuid"]
+#
+# Normalise the '+' encoding before comparing. The two release lines differ:
+# 0.4.20 stores pkg:pypi/jinja2@2.11.3+rhlw00001 (normalised) while 0.5.0
+# stores ...@2.11.3%2Brhlw00001 (as syft wrote it). Both still MATCH a VEX
+# using the literal form - only this lookup cared.
+def norm(purl):
+    return purl.replace("%2B", "+").replace("%2b", "+")
+
+purls = {norm(p["purl"]): p["uuid"]
          for p in get(f"/api/{V}/purl?q=jinja2&limit=200").get("items", [])}
 builds = [("vulnerable  2.11.3",          "pkg:pypi/jinja2@2.11.3"),
           ("remediated  2.11.3+rhlw00001", "pkg:pypi/jinja2@2.11.3+rhlw00001")]
