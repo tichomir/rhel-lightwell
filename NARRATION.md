@@ -247,13 +247,28 @@ not follow why the next forty minutes matter.**
 
 ## Act 3 — Lightwell remediation · ~10 minutes
 
-`[SCREEN: the Lightwell index]`
+`[SCREEN: curl against the Lightwell index]`
 
 > Red Hat Lightwell Network publishes the fix backported into the version I
-> already run. Here is the index, and here is the only version it offers for
-> this package — two point eleven point three, plus a Lightwell suffix.
+> already run. So let me ask the index directly.
 >
-> Same version I pinned. Plus a fix.
+> A Python package index is just a web page listing filenames. This is the
+> shortest possible question: what is on the shelf for this package?
+>
+> One file. Two point eleven point three — the version I already run in
+> production — plus a Lightwell suffix. Same version I pinned. Plus a fix.
+
+`[SCREEN: pip index versions]`
+
+> But a filename on a web page is not the same as something my build can use.
+> So let me ask the tool that matters.
+>
+> This is pip, in a clean throwaway container, pointed at that index. Not the
+> builder's configuration — a fresh Python, asking what versions it can see.
+>
+> One line. And that is the only version this index offers. So when the build
+> runs in a minute, that is not a version it *might* pick. It is the only one
+> it can.
 
 `[SCREEN: the patch diff — git diff --stat then the two files]`
 
